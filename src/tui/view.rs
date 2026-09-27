@@ -40,10 +40,10 @@ fn header(app: &App, inner: usize) -> Vec<Line<'static>> {
     header
 }
 
-/// `←  Claude Code  →` where ←/→ switch the previewed agent, the bare name elsewhere.
+/// `◂  Claude Code  ▸` where ←/→ switch the previewed agent, the bare name elsewhere.
 fn agent_control(host: Host, cycles: bool) -> Line<'static> {
     if cycles {
-        Line::from(vec![muted("←  "), text(host.label()), muted("  →")])
+        Line::from(vec![muted("◂  "), text(host.label()), muted("  ▸")])
     } else {
         Line::from(text(host.label()))
     }
@@ -210,11 +210,11 @@ fn look(app: &App, inner: usize) -> Screenful {
     (body, app.cursor * 2, hint.to_string())
 }
 
-/// `‹ short-giraffe ›`: one picked value, since the full list outgrows narrow cards.
+/// `◂ short-giraffe ▸`: one picked value, since the full list outgrows narrow cards.
 fn theme_picker(current: Theme, focused: bool) -> Vec<Span<'static>> {
     let position = Theme::ALL.iter().position(|theme| *theme == current).unwrap_or(0) + 1;
     let arrows = |arrow: &str| if focused { text(arrow) } else { muted(arrow) };
-    vec![muted(format!("{position}/{}  ", Theme::ALL.len())), arrows("‹ "), focus(current.name()), arrows(" ›")]
+    vec![muted(format!("{position}/{}  ", Theme::ALL.len())), arrows("◂ "), focus(current.name()), arrows(" ▸")]
 }
 
 /// Focused names are red; inactive ones (hidden segment, missing agent) are muted.

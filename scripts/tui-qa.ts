@@ -7,7 +7,7 @@ deterministic. Snapshot and screenshot after every action into qa-results/.
 Asserts copy and chrome, not pixels.
 */
 
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -89,6 +89,8 @@ async function main(): Promise<number> {
     console.error("BLOCKED: tuistory not on PATH");
     return 2;
   }
+  // Captures from an earlier run with more steps would pass for this run's.
+  await rm(ARTIFACTS, { recursive: true, force: true });
   await mkdir(ARTIFACTS, { recursive: true });
   await tui(["close"], true);
   const { worktree, env } = await fixture();
@@ -101,16 +103,16 @@ async function main(): Promise<number> {
     const home = await snapshot("home");
     must(home, "home", "Segments", "Agents", "Look", "Quit", "Choose what the line shows");
     must(home, "home", "app:app-auth", "smx-1-auth", "SMX-1 Fix the auth flow", "(In Progress)", "Opus", "42%");
-    must(home, "home", "←  Claude Code  →");
+    must(home, "home", "◂  Claude Code  ▸");
     mustNot(home, "home", "Claude Code · available", "other agents");
     must(home, "home", "0 installed · 4 available · 6 not found");
     cardChrome(home, "home");
 
     await press("enter");
     const segments = await snapshot("segments");
-    must(segments, "segments", "Every agent uses this list", "←  Claude Code  →", "shown", "hidden", "not in Amp");
+    must(segments, "segments", "Every agent uses this list", "◂  Claude Code  ▸", "shown", "hidden", "not in Amp");
     await press("right");
-    must(await snapshot("segments-preview-cursor"), "segments-preview-cursor", "←  Factory Droid  →", "Factory Droid doesn't report its context");
+    must(await snapshot("segments-preview-cursor"), "segments-preview-cursor", "◂  Factory Droid  ▸", "Factory Droid doesn't report its context");
     await press("left");
     cardChrome(segments, "segments");
 
@@ -129,7 +131,7 @@ async function main(): Promise<number> {
     await press("down", "down", "down", "down", "down");
     const amp = await snapshot("agents-amp");
     must(amp, "agents-amp", "Amp doesn't report its model and context");
-    mustNot(amp, "agents-amp", "←  Amp  →", "Amp · available");
+    mustNot(amp, "agents-amp", "◂  Amp  ▸", "Amp · available");
     mustNot(amp.split("\n").slice(0, 6).join("\n"), "agents-amp", "Opus");
 
     await press("enter");
@@ -143,7 +145,7 @@ async function main(): Promise<number> {
 
     await press("esc", "esc", "down", "enter", "right");
     const look = await snapshot("look");
-    must(look, "look", "Theme", "short-giraffe", "Icons", "On", "Off");
+    must(look, "look", "Theme", "◂ short-giraffe ▸", "Icons", "On", "Off");
     cardChrome(look, "look");
 
     await tui(["resize", "80", "24"]);
