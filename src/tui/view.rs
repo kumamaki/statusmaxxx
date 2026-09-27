@@ -115,7 +115,11 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
         if focused {
             focus_line = body.len();
         }
-        let state = if *shown { text("shown") } else { muted("hidden") };
+        let state = match (focused && app.moving, *shown) {
+            (true, _) => focus("moving"),
+            (false, true) => text("shown"),
+            (false, false) => muted("hidden"),
+        };
         body.push(spread(vec![name_span(segment.name(), focused, *shown)], vec![state], inner));
         body.push(Line::from(match host {
             Some(host) if !host.supports(*segment) => focus(format!("{} cannot show this", host.label())),
@@ -123,9 +127,10 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
             None => muted(with_gaps(segment.description(), &agents_without(app, *segment))),
         }));
     }
-    let hint = match rows[app.cursor] {
-        (_, true) => "space hides it · J/K moves it · esc back",
-        (_, false) => "space shows it · esc back",
+    let hint = match (app.moving, rows[app.cursor].1) {
+        (true, _) => "↑/↓ moves it · enter puts it down",
+        (false, true) => "space hides it · m moves it · esc back",
+        (false, false) => "space shows it · m moves it · esc back",
     };
     (body, focus_line, hint.to_string())
 }

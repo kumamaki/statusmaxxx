@@ -78,6 +78,10 @@ struct App {
     preview_host: Host,
     /// Outcome of the last action on this screen.
     notice: Vec<Line<'static>>,
+    /// The Segments screen's rows, fixed for the visit so toggling never moves one.
+    segment_order: Vec<Segment>,
+    /// The focused segment is picked up; ↑/↓ carry it.
+    moving: bool,
     done: bool,
 }
 
@@ -91,6 +95,8 @@ impl App {
             cursor: 0,
             preview_host: Host::Claude,
             notice: Vec::new(),
+            segment_order: Vec::new(),
+            moving: false,
             done: false,
         };
         app.reload_agents()?;
@@ -130,13 +136,20 @@ impl App {
             self.done = true;
             return;
         }
-        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+        if self.moving {
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => self.carry(-1),
+                KeyCode::Down | KeyCode::Char('j') => self.carry(1),
+                KeyCode::Enter | KeyCode::Char(' ' | 'm') | KeyCode::Esc => self.moving = false,
+                _ => {}
+            }
+            return;
+        }
         match key.code {
             KeyCode::Esc => self.back(),
-            KeyCode::Up | KeyCode::Char('k') if !shift => self.move_cursor(-1),
-            KeyCode::Down | KeyCode::Char('j') if !shift => self.move_cursor(1),
-            KeyCode::Up | KeyCode::Char('K') => self.reorder(-1),
-            KeyCode::Down | KeyCode::Char('J') => self.reorder(1),
+            KeyCode::Up | KeyCode::Char('k') => self.move_cursor(-1),
+            KeyCode::Down | KeyCode::Char('j') => self.move_cursor(1),
+            KeyCode::Char('m') if matches!(self.screen, Screen::Segments(_)) => self.moving = true,
             KeyCode::Left | KeyCode::Char('h') => self.step(-1),
             KeyCode::Right | KeyCode::Char('l') => self.step(1),
             KeyCode::Enter | KeyCode::Char(' ') => self.activate(),
@@ -163,6 +176,12 @@ impl App {
         self.screen = screen;
         self.cursor = cursor;
         self.notice.clear();
+        self.moving = false;
+        if let Screen::Segments(host) = screen {
+            let shown = self.shown_segments(host);
+            let hidden = Segment::ALL.into_iter().filter(|segment| !shown.contains(segment));
+            self.segment_order = shown.iter().copied().chain(hidden).collect();
+        }
     }
 
     /// Back to the screen that opened this one, focused on the item that opened it.
@@ -236,10 +255,10 @@ impl App {
     }
 
     /// Segment rows: the shown ones in their order, then the hidden ones.
+    /// Every segment in this visit's fixed order, with whether it is shown.
     fn segment_rows(&self, host: Option<Host>) -> Vec<(Segment, bool)> {
         let shown = self.shown_segments(host);
-        let hidden = Segment::ALL.into_iter().filter(|segment| !shown.contains(segment));
-        shown.iter().map(|segment| (*segment, true)).chain(hidden.map(|segment| (segment, false))).collect()
+        self.segment_order.iter().map(|segment| (*segment, shown.contains(segment))).collect()
     }
 
     fn shown_segments(&self, host: Option<Host>) -> &[Segment] {
@@ -251,29 +270,30 @@ impl App {
 
     fn toggle_segment(&mut self, host: Option<Host>) {
         let (segment, shown) = self.segment_rows(host)[self.cursor];
-        let segments = self.config.segments_mut(host);
-        if shown {
-            segments.retain(|candidate| *candidate != segment);
-        } else {
-            segments.push(segment);
-        }
-        // The segment moved to the edge of the shown block; keep focus on it.
-        self.cursor = self.segment_rows(host).iter().position(|(candidate, _)| *candidate == segment).unwrap_or(0);
-        self.save();
+        self.write_shown(host, |candidate, is_shown| if candidate == segment { !shown } else { is_shown });
     }
 
-    /// Only shown segments have an order to change.
-    fn reorder(&mut self, offset: isize) {
+    /// Moves the picked-up segment one row; a shown one moves in the status line too.
+    fn carry(&mut self, offset: isize) {
         let Screen::Segments(host) = self.screen else { return };
-        let segments = self.config.segments_mut(host);
-        let Some(target) = self.cursor.checked_add_signed(offset).filter(|target| *target < segments.len()) else {
+        let Some(target) = self.cursor.checked_add_signed(offset).filter(|target| *target < self.segment_order.len())
+        else {
             return;
         };
-        if self.cursor >= segments.len() {
-            return;
-        }
-        segments.swap(self.cursor, target);
+        self.segment_order.swap(self.cursor, target);
         self.cursor = target;
+        self.write_shown(host, |_, is_shown| is_shown);
+    }
+
+    /// The status line shows the segments `keep` picks, in the screen's order.
+    fn write_shown(&mut self, host: Option<Host>, keep: impl Fn(Segment, bool) -> bool) {
+        let shown: Vec<Segment> = self
+            .segment_rows(host)
+            .into_iter()
+            .filter(|(segment, shown)| keep(*segment, *shown))
+            .map(|(segment, _)| segment)
+            .collect();
+        *self.config.segments_mut(host) = shown;
         self.save();
     }
 

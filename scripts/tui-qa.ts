@@ -71,6 +71,16 @@ function stepper(screen: string, label: string): { name: string; left: number; r
   return { name: line.slice(left + 1, right).trim(), left, right };
 }
 
+/** Segment names in the order the Segments screen lists them. */
+function rowOrder(screen: string): string[] {
+  return [...screen.matchAll(/│ {3}([a-z]+) +(?:shown|hidden|moving) +│/g)].map((match) => match[1]);
+}
+
+/** The preview line: the first header row. */
+function previewLine(screen: string): string {
+  return screen.split("\n")[3] ?? "";
+}
+
 function cardChrome(screen: string, label: string): void {
   must(screen, label, "╭─────────────────╮", "│   statusmaxxx   ╰", "╯  esc  │", "├", "╰");
 }
@@ -124,6 +134,7 @@ async function main(): Promise<number> {
     await press("enter");
     const segments = await snapshot("segments");
     must(segments, "segments", "Every agent uses this list", "shown", "hidden", "not in Amp");
+    if (rowOrder(segments).length !== 7) failed.push(`segments: parsed rows ${rowOrder(segments)}`);
     await press("right");
     const droid = await snapshot("segments-preview-cursor");
     must(droid, "segments-preview-cursor", "Factory Droid doesn't report its context");
@@ -137,10 +148,28 @@ async function main(): Promise<number> {
 
     await press("down", "space");
     const hidden = await snapshot("segments-git-hidden");
-    mustNot(hidden.split("\n").slice(0, 6).join("\n"), "segments-git-hidden", "smx-1-auth");
+    mustNot(previewLine(hidden), "segments-git-hidden", "smx-1-auth");
+    if (rowOrder(hidden).join() !== rowOrder(segments).join()) {
+      failed.push(`segments-git-hidden: rows moved from ${rowOrder(segments)} to ${rowOrder(hidden)}`);
+    }
     await press("space");
     const restored = await snapshot("segments-git-restored");
-    must(restored.split("\n").slice(0, 6).join("\n"), "segments-git-restored", "smx-1-auth");
+    must(previewLine(restored), "segments-git-restored", "smx-1-auth");
+    if (rowOrder(restored).join() !== rowOrder(segments).join()) {
+      failed.push(`segments-git-restored: rows moved to ${rowOrder(restored)}`);
+    }
+
+    // Carry git below issue: the list and the status line both follow.
+    await press("m");
+    must(await snapshot("segments-git-picked-up"), "segments-git-picked-up", "moving", "enter puts it down");
+    await press("down", "enter");
+    const moved = await snapshot("segments-git-moved");
+    const order = rowOrder(moved);
+    if (order.indexOf("issue") > order.indexOf("git")) failed.push(`segments-git-moved: order is ${order}`);
+    const line = previewLine(moved);
+    if (line.indexOf("SMX-1") > line.indexOf("smx-1-auth")) failed.push(`segments-git-moved: preview is ${line.trim()}`);
+    mustNot(moved, "segments-git-moved", "moving");
+    await press("m", "up", "enter");
 
     await press("esc", "down", "enter");
     const agents = await snapshot("agents");
