@@ -1,0 +1,36 @@
+[package]
+name = "statusmaxxx"
+version = "0.1.0"
+edition = "2024"
+description = "One status line for every coding agent: worktree, git, Linear, model, context"
+license = "WTFPL"
+repository = "https://github.com/kumamaki/statusmaxxx"
+homepage = "https://github.com/kumamaki/statusmaxxx"
+authors = ["kumamaki"]
+keywords = ["statusline", "claude-code", "amp", "cli", "tui"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+ansi-to-tui = "8.0.1"
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+dirs = "7.0.0"
+ratatui = "0.30.2"
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+toml = "1.1.6"
+toml_edit = "0.25.15"
+ureq = { version = "3.4.2", features = ["json"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"

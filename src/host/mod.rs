@@ -1,0 +1,214 @@
+//! Agents we draw into. Each has one integration tier:
+//! - command: the agent runs `statusmaxxx render` with session JSON on stdin;
+//! - plugin: a generated shim inside the agent calls `render` and shows the text;
+//! - built-in: no custom text exists, so we choose and order the agent's own items.
+
+mod builtin;
+mod command;
+mod plugin;
+mod replaced;
+pub mod settings;
+
+pub use builtin::item as builtin_item;
+
+use std::fmt;
+use std::path::PathBuf;
+
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+
+use crate::config::Config;
+use crate::paths;
+use crate::segment::Segment;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum Host {
+    Claude,
+    Cursor,
+    Qwen,
+    Droid,
+    Copilot,
+    Amp,
+    Pi,
+    Opencode,
+    Codex,
+    Gemini,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tier {
+    Command,
+    Plugin,
+    BuiltIn,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Output {
+    Ansi {
+        hyperlinks: bool,
+    },
+    /// `{"text": …, "url": …}` for plugin shims, which style text themselves.
+    Json,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstallState {
+    Installed,
+    NotInstalled,
+    /// Another status line occupies the slot; installing replaces it.
+    Occupied(String),
+}
+
+impl Host {
+    pub const ALL: [Host; 10] = [
+        Host::Claude,
+        Host::Cursor,
+        Host::Qwen,
+        Host::Droid,
+        Host::Copilot,
+        Host::Amp,
+        Host::Pi,
+        Host::Opencode,
+        Host::Codex,
+        Host::Gemini,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Host::Claude => "claude",
+            Host::Cursor => "cursor",
+            Host::Qwen => "qwen",
+            Host::Droid => "droid",
+            Host::Copilot => "copilot",
+            Host::Amp => "amp",
+            Host::Pi => "pi",
+            Host::Opencode => "opencode",
+            Host::Codex => "codex",
+            Host::Gemini => "gemini",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Host::Claude => "Claude Code",
+            Host::Cursor => "Cursor CLI",
+            Host::Qwen => "Qwen Code",
+            Host::Droid => "Factory Droid",
+            Host::Copilot => "Copilot CLI",
+            Host::Amp => "Amp",
+            Host::Pi => "pi",
+            Host::Opencode => "OpenCode",
+            Host::Codex => "Codex CLI",
+            Host::Gemini => "Gemini CLI",
+        }
+    }
+
+    pub fn tier(self) -> Tier {
+        match self {
+            Host::Claude | Host::Cursor | Host::Qwen | Host::Droid | Host::Copilot => Tier::Command,
+            Host::Amp | Host::Pi | Host::Opencode => Tier::Plugin,
+            Host::Codex | Host::Gemini => Tier::BuiltIn,
+        }
+    }
+
+    pub fn output(self) -> Output {
+        match self.tier() {
+            // Only Claude Code documents OSC 8 links; elsewhere they could print as garbage.
+            Tier::Command => Output::Ansi { hyperlinks: self == Host::Claude },
+            Tier::Plugin | Tier::BuiltIn => Output::Json,
+        }
+    }
+
+    /// What the user should know about this integration before installing it.
+    pub fn note(self) -> &'static str {
+        match self {
+            Host::Claude => "Runs as the statusLine command; issue links are clickable.",
+            Host::Cursor => "Runs as the statusLine command, which replaces Cursor's own footer.",
+            Host::Qwen => "Runs as ui.statusLine with the agent's colors respected.",
+            Host::Droid => "Runs as the statusLine command. Droid sends no cost, so that segment stays empty.",
+            Host::Copilot => {
+                "Runs as the statusLine command. Copilot does not document its session JSON, so segments it does not send stay empty."
+            }
+            Host::Amp => "Plugin on Amp's experimental status item API, which Amp may change; CLI only.",
+            Host::Pi => "Extension that adds a status entry to pi's footer.",
+            Host::Opencode => {
+                "TUI plugin in the app_bottom slot. OpenCode documents this API only in its repository spec."
+            }
+            Host::Codex | Host::Gemini => {
+                "Only the agent's own items can show, so worktree and Linear are not available."
+            }
+        }
+    }
+
+    /// Segments the agent can show. Built-in hosts only have their own item equivalents.
+    pub fn supports(self, segment: Segment) -> bool {
+        match self.tier() {
+            Tier::Command | Tier::Plugin => true,
+            Tier::BuiltIn => builtin::item(self, segment).is_some(),
+        }
+    }
+
+    /// The agent's config home; its existence is how we detect the agent.
+    pub fn home(self) -> Result<PathBuf> {
+        match self {
+            Host::Claude => overridable_home("CLAUDE_CONFIG_DIR", ".claude"),
+            Host::Cursor => Ok(paths::home()?.join(".cursor")),
+            Host::Qwen => Ok(paths::home()?.join(".qwen")),
+            Host::Droid => Ok(paths::home()?.join(".factory")),
+            Host::Copilot => overridable_home("COPILOT_HOME", ".copilot"),
+            Host::Amp => Ok(paths::xdg_config_home()?.join("amp")),
+            Host::Pi => Ok(paths::home()?.join(".pi").join("agent")),
+            Host::Opencode => Ok(paths::xdg_config_home()?.join("opencode")),
+            Host::Codex => overridable_home("CODEX_HOME", ".codex"),
+            Host::Gemini => Ok(paths::home()?.join(".gemini")),
+        }
+    }
+
+    pub fn detected(self) -> Result<bool> {
+        Ok(self.home()?.is_dir())
+    }
+
+    pub fn state(self, config: &Config) -> Result<InstallState> {
+        match self.tier() {
+            Tier::Command => command::state(self),
+            Tier::Plugin => plugin::state(self),
+            Tier::BuiltIn => builtin::state(self, config),
+        }
+    }
+
+    /// Returns one line per file written.
+    pub fn install(self, config: &Config) -> Result<Vec<String>> {
+        match self.tier() {
+            Tier::Command => command::install(self),
+            Tier::Plugin => plugin::install(self),
+            Tier::BuiltIn => builtin::install(self, config),
+        }
+    }
+
+    pub fn uninstall(self) -> Result<Vec<String>> {
+        match self.tier() {
+            Tier::Command => command::uninstall(self),
+            Tier::Plugin => plugin::uninstall(self),
+            Tier::BuiltIn => builtin::uninstall(self),
+        }
+    }
+}
+
+impl fmt::Display for Host {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.id())
+    }
+}
+
+fn overridable_home(variable: &str, default: &str) -> Result<PathBuf> {
+    match std::env::var_os(variable) {
+        Some(value) if !value.is_empty() => Ok(PathBuf::from(value)),
+        _ => Ok(paths::home()?.join(default)),
+    }
+}
+
+/// Single-quotes `text` for `/bin/sh`.
+pub(crate) fn shell_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', r"'\''"))
+}
