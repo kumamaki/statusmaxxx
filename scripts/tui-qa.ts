@@ -145,47 +145,49 @@ async function main(): Promise<number> {
     await press("enter");
     const segments = await snapshot("segments");
     must(segments, "segments", "Every agent uses this list", "shown", "hidden", "not in Amp", "◂ shown");
-    if (rowOrder(segments).length !== 7) failed.push(`segments: parsed rows ${rowOrder(segments)}`);
+    if (rowOrder(segments).join(" ") !== "worktree branch changes issue model context directory cost") {
+      failed.push(`segments: rows are ${rowOrder(segments)}`);
+    }
     cardChrome(segments, "segments");
 
     await press("down", "space");
-    const hidden = await snapshot("segments-git-hidden");
-    mustNot(previewLine(hidden), "segments-git-hidden", "smx-1-auth");
+    const hidden = await snapshot("segments-branch-hidden");
+    mustNot(previewLine(hidden), "segments-branch-hidden", "smx-1-auth");
     if (rowOrder(hidden).join() !== rowOrder(segments).join()) {
-      failed.push(`segments-git-hidden: rows moved from ${rowOrder(segments)} to ${rowOrder(hidden)}`);
+      failed.push(`segments-branch-hidden: rows moved from ${rowOrder(segments)} to ${rowOrder(hidden)}`);
     }
     await press("space");
-    const restored = await snapshot("segments-git-restored");
-    must(previewLine(restored), "segments-git-restored", "smx-1-auth");
+    const restored = await snapshot("segments-branch-restored");
+    must(previewLine(restored), "segments-branch-restored", "smx-1-auth");
     if (rowOrder(restored).join() !== rowOrder(segments).join()) {
-      failed.push(`segments-git-restored: rows moved to ${rowOrder(restored)}`);
+      failed.push(`segments-branch-restored: rows moved to ${rowOrder(restored)}`);
     }
 
-    // Carry git below issue: the list and the status line both follow.
+    // Carry branch below changes: the list and the status line both follow.
     await press("m");
-    must(await snapshot("segments-git-picked-up"), "segments-git-picked-up", "moving", "enter puts it down");
+    must(await snapshot("segments-branch-picked-up"), "segments-branch-picked-up", "moving", "enter puts it down");
     await press("down", "enter");
-    const moved = await snapshot("segments-git-moved");
+    const moved = await snapshot("segments-branch-moved");
     const order = rowOrder(moved);
-    if (order.indexOf("issue") > order.indexOf("git")) failed.push(`segments-git-moved: order is ${order}`);
+    if (order.indexOf("changes") > order.indexOf("branch")) failed.push(`segments-branch-moved: order is ${order}`);
     const line = previewLine(moved);
-    if (line.indexOf("SMX-1") > line.indexOf("smx-1-auth")) failed.push(`segments-git-moved: preview is ${line.trim()}`);
-    mustNot(moved, "segments-git-moved", "moving");
+    if (line.indexOf("✓") > line.indexOf("smx-1-auth")) failed.push(`segments-branch-moved: preview is ${line.trim()}`);
+    mustNot(moved, "segments-branch-moved", "moving");
     await press("m", "up", "enter");
 
     // ←/→ flip shown and hidden on the focused row, like space.
     await press("right");
-    mustNot(previewLine(await snapshot("segments-git-arrow-hidden")), "segments-git-arrow-hidden", "smx-1-auth");
+    mustNot(previewLine(await snapshot("segments-branch-arrow-hidden")), "segments-branch-arrow-hidden", "smx-1-auth");
     await press("left");
-    must(previewLine(await snapshot("segments-git-arrow-shown")), "segments-git-arrow-shown", "smx-1-auth");
+    must(previewLine(await snapshot("segments-branch-arrow-shown")), "segments-branch-arrow-shown", "smx-1-auth");
 
-    // i turns only git's icon off.
+    // i turns only branch's icon off.
     const gitIcon = "\ue725";
-    must(previewLine(restored), "segments-git-icon-before", gitIcon);
+    must(previewLine(restored), "segments-branch-icon-before", gitIcon);
     await press("i");
-    const iconOff = await snapshot("segments-git-icon-off");
-    mustNot(previewLine(iconOff), "segments-git-icon-off", gitIcon);
-    must(previewLine(iconOff), "segments-git-icon-off", "\uf1bb");
+    const iconOff = await snapshot("segments-branch-icon-off");
+    mustNot(previewLine(iconOff), "segments-branch-icon-off", gitIcon);
+    must(previewLine(iconOff), "segments-branch-icon-off", "\uf1bb");
     await press("i");
 
     await press("esc", "down", "enter");

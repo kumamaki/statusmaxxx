@@ -11,16 +11,18 @@ use crate::config::Config;
 use crate::paths;
 use crate::segment::Segment;
 
-/// The agent's own item that shows the same thing as `segment`, if any.
+/// The agent's own item that shows the same thing as `segment`, if any. Near
+/// misses stay out: Codex's `branch-changes` is lines changed against the base
+/// branch, not uncommitted files.
 pub fn item(host: Host, segment: Segment) -> Option<&'static str> {
     match (host, segment) {
         (Host::Codex, Segment::Directory) => Some("current-dir"),
-        (Host::Codex, Segment::Git) => Some("git-branch"),
+        (Host::Codex, Segment::Branch) => Some("git-branch"),
         (Host::Codex, Segment::Model) => Some("model-with-reasoning"),
         (Host::Codex, Segment::Context) => Some("context-used"),
         (Host::Codex, Segment::Cost) => Some("estimated-thread-cost"),
         (Host::Gemini, Segment::Directory) => Some("workspace"),
-        (Host::Gemini, Segment::Git) => Some("git-branch"),
+        (Host::Gemini, Segment::Branch) => Some("git-branch"),
         (Host::Gemini, Segment::Model) => Some("model-name"),
         (Host::Gemini, Segment::Context) => Some("context-used"),
         _ => None,

@@ -12,6 +12,7 @@ use crate::theme::Theme;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    #[serde(deserialize_with = "Segment::deserialize_list")]
     pub segments: Vec<Segment>,
     pub theme: Theme,
     /// Segments drawn with their Nerd Font icon. `true`/`false` stand for all or none.
@@ -25,13 +26,21 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HostOverride {
+    #[serde(deserialize_with = "Segment::deserialize_list")]
     pub segments: Vec<Segment>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            segments: vec![Segment::Worktree, Segment::Git, Segment::Issue, Segment::Model, Segment::Context],
+            segments: vec![
+                Segment::Worktree,
+                Segment::Branch,
+                Segment::Changes,
+                Segment::Issue,
+                Segment::Model,
+                Segment::Context,
+            ],
             theme: Theme::default(),
             icons: Segment::ALL.into_iter().filter(|segment| segment.has_icon()).collect(),
             separator: "  ".to_string(),
@@ -45,12 +54,12 @@ fn icons_from_list_or_bool<'de, D: serde::Deserializer<'de>>(deserializer: D) ->
     #[serde(untagged)]
     enum Icons {
         All(bool),
-        Some(BTreeSet<Segment>),
+        Some(Vec<String>),
     }
     Ok(match Icons::deserialize(deserializer)? {
         Icons::All(true) => Segment::ALL.into_iter().filter(|segment| segment.has_icon()).collect(),
         Icons::All(false) => BTreeSet::new(),
-        Icons::Some(segments) => segments,
+        Icons::Some(names) => Segment::parse_names(&names).map_err(serde::de::Error::custom)?.into_iter().collect(),
     })
 }
 
@@ -91,7 +100,7 @@ mod tests {
     #[test]
     fn icons_accept_a_list_or_all_or_none() {
         let icons = |toml: &str| toml::from_str::<Config>(toml).unwrap().icons.into_iter().collect::<Vec<_>>();
-        assert_eq!(icons("icons = [\"git\", \"model\"]"), [Segment::Git, Segment::Model]);
+        assert_eq!(icons("icons = [\"branch\", \"model\"]"), [Segment::Branch, Segment::Model]);
         assert_eq!(icons("icons = false"), []);
         assert!(icons("icons = true").contains(&Segment::Worktree) && !icons("icons = true").contains(&Segment::Cost));
     }
@@ -101,7 +110,8 @@ mod tests {
         let config: Config =
             toml::from_str("segments = [\"git\", \"model\"]\n[hosts.amp]\nsegments = [\"worktree\", \"issue\"]\n")
                 .unwrap();
-        assert_eq!(config.segments_for(Host::Claude), [Segment::Git, Segment::Model]);
+        // `git` names branch and changes together.
+        assert_eq!(config.segments_for(Host::Claude), [Segment::Branch, Segment::Changes, Segment::Model]);
         assert_eq!(config.segments_for(Host::Amp), [Segment::Worktree, Segment::Issue]);
     }
 }

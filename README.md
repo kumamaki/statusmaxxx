@@ -51,16 +51,16 @@ Command agents run a small wrapper script in `~/.config/statusmaxxx/hosts/`. It 
 `~/.config/statusmaxxx/config.toml`, written by the TUI:
 
 ```toml
-segments = ["worktree", "git", "issue", "model", "context"]
+segments = ["worktree", "branch", "changes", "issue", "model", "context"]
 theme = "terminal"          # terminal, short-giraffe, catppuccin, dracula, nord, gruvbox, light
-icons = ["worktree", "git", "issue", "model", "context"]   # or true / false for all / none
+icons = ["worktree", "branch", "issue", "model", "context"]   # or true / false for all / none
 separator = "  "
 
 [hosts.amp]                 # Amp shows its own model, so it gets its own list
-segments = ["worktree", "git", "issue"]
+segments = ["worktree", "branch", "issue"]
 ```
 
-Segments: `directory`, `worktree`, `git`, `issue`, `model`, `context`, `cost`. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
+Segments: `directory`, `worktree`, `branch`, `changes`, `issue`, `model`, `context`, `cost`. `git` also works and means `branch` and `changes`. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
 
 ## Issues
 

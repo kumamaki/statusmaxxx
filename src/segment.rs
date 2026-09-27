@@ -13,12 +13,13 @@ use crate::theme::Role;
 
 const TITLE_LIMIT: usize = 36;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Segment {
     Directory,
     Worktree,
-    Git,
+    Branch,
+    Changes,
     Issue,
     Model,
     Context,
@@ -26,10 +27,11 @@ pub enum Segment {
 }
 
 impl Segment {
-    pub const ALL: [Segment; 7] = [
+    pub const ALL: [Segment; 8] = [
         Segment::Directory,
         Segment::Worktree,
-        Segment::Git,
+        Segment::Branch,
+        Segment::Changes,
         Segment::Issue,
         Segment::Model,
         Segment::Context,
@@ -40,7 +42,8 @@ impl Segment {
         match self {
             Segment::Directory => "directory",
             Segment::Worktree => "worktree",
-            Segment::Git => "git",
+            Segment::Branch => "branch",
+            Segment::Changes => "changes",
             Segment::Issue => "issue",
             Segment::Model => "model",
             Segment::Context => "context",
@@ -52,7 +55,8 @@ impl Segment {
         match self {
             Segment::Directory => "Working directory, relative to the repository",
             Segment::Worktree => "Repository, plus the linked worktree you are in",
-            Segment::Git => "Branch and number of changed files",
+            Segment::Branch => "Current branch, or the commit when detached",
+            Segment::Changes => "Changed files, or a check when the tree is clean",
             Segment::Issue => "Issues the agent set with `statusmaxxx issue set`",
             Segment::Model => "Model the agent reports",
             Segment::Context => "Context window used",
@@ -68,12 +72,37 @@ impl Segment {
         match self {
             Segment::Directory => "\u{f07b}",
             Segment::Worktree => "\u{f401}",
-            Segment::Git => "\u{e725}",
+            Segment::Branch => "\u{e725}",
+            // `±3` and `✓` already are the glyph.
+            Segment::Changes => "",
             Segment::Issue => "\u{f41b}",
             Segment::Model => "\u{f06a9}",
             Segment::Context => "\u{f200}",
             Segment::Cost => "",
         }
+    }
+}
+
+impl Segment {
+    pub fn from_name(name: &str) -> Option<Segment> {
+        Segment::ALL.into_iter().find(|segment| segment.name() == name)
+    }
+
+    /// Segments named in a config list. `git` names `branch` then `changes`.
+    pub fn parse_names(names: &[String]) -> Result<Vec<Segment>, String> {
+        let mut segments = Vec::new();
+        for name in names {
+            match name.as_str() {
+                "git" => segments.extend([Segment::Branch, Segment::Changes]),
+                name => segments.push(Segment::from_name(name).ok_or_else(|| format!("unknown segment <{name}>"))?),
+            }
+        }
+        Ok(segments)
+    }
+
+    pub fn deserialize_list<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<Segment>, D::Error> {
+        let names = Vec::<String>::deserialize(deserializer)?;
+        Segment::parse_names(&names).map_err(serde::de::Error::custom)
     }
 }
 
@@ -135,8 +164,12 @@ impl Segment {
                 Some(repo) => worktree(repo, sources),
                 None => vec![],
             },
-            Segment::Git => match sources.repo()? {
-                Some(repo) => git(repo, sources),
+            Segment::Branch => match sources.repo()? {
+                Some(repo) => vec![branch(repo, sources)],
+                None => vec![],
+            },
+            Segment::Changes => match sources.repo()? {
+                Some(repo) => vec![changes(repo)],
                 None => vec![],
             },
             Segment::Issue => match sources.repo()? {
@@ -186,17 +219,19 @@ fn worktree(repo: &Repo, sources: &Sources) -> Vec<Piece> {
     }
 }
 
-fn git(repo: &Repo, sources: &Sources) -> Vec<Piece> {
+fn branch(repo: &Repo, sources: &Sources) -> Piece {
     let head = match &repo.head {
         Head::Branch(name) => name.clone(),
         Head::Detached(oid) => format!("@{oid}"),
     };
-    let status = if repo.changed_files == 0 {
-        Piece::new(Role::Clean, " ✓")
-    } else {
-        Piece::new(Role::Dirty, format!(" ±{}", repo.changed_files))
-    };
-    vec![Piece::new(Role::Branch, sources.label(Segment::Git, &head)), status]
+    Piece::new(Role::Branch, sources.label(Segment::Branch, &head))
+}
+
+fn changes(repo: &Repo) -> Piece {
+    match repo.changed_files {
+        0 => Piece::new(Role::Clean, "✓"),
+        count => Piece::new(Role::Dirty, format!("±{count}")),
+    }
 }
 
 /// The first issue in full, the rest by id.

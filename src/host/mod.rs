@@ -154,7 +154,7 @@ impl Host {
             return builtin::item(self, segment).is_some();
         }
         match segment {
-            Segment::Directory | Segment::Worktree | Segment::Git | Segment::Issue => true,
+            Segment::Directory | Segment::Worktree | Segment::Branch | Segment::Changes | Segment::Issue => true,
             // The Amp and OpenCode shims only know the workspace folder.
             Segment::Model => !matches!(self, Host::Amp | Host::Opencode),
             // Droid sends `context: null` before the first reply; its later shape is unrecorded.
