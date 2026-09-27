@@ -183,7 +183,7 @@ fn look(app: &App, inner: usize) -> Screenful {
             body.push(Line::default());
         }
         let (name, chips) = match item {
-            LookItem::Theme => ("Theme", theme_chips(app.config.theme, focused)),
+            LookItem::Theme => ("Theme", theme_picker(app.config.theme, focused)),
             LookItem::Icons => (
                 "Icons",
                 vec![chip("On", app.config.icons, focused), muted("  "), chip("Off", !app.config.icons, focused)],
@@ -198,15 +198,11 @@ fn look(app: &App, inner: usize) -> Screenful {
     (body, app.cursor * 2, hint.to_string())
 }
 
-fn theme_chips(current: Theme, focused: bool) -> Vec<Span<'static>> {
-    let mut chips = Vec::new();
-    for (index, theme) in Theme::ALL.iter().enumerate() {
-        if index > 0 {
-            chips.push(muted("  "));
-        }
-        chips.push(chip(theme.name(), *theme == current, focused));
-    }
-    chips
+/// `‹ short-giraffe ›`: one picked value, since the full list outgrows narrow cards.
+fn theme_picker(current: Theme, focused: bool) -> Vec<Span<'static>> {
+    let position = Theme::ALL.iter().position(|theme| *theme == current).unwrap_or(0) + 1;
+    let arrows = |arrow: &str| if focused { text(arrow) } else { muted(arrow) };
+    vec![muted(format!("{position}/{}  ", Theme::ALL.len())), arrows("‹ "), focus(current.name()), arrows(" ›")]
 }
 
 /// Focused names are red; inactive ones (hidden segment, missing agent) are muted.

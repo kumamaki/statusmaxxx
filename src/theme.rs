@@ -29,6 +29,7 @@ enum Color {
 pub enum Theme {
     #[default]
     Terminal,
+    ShortGiraffe,
     Catppuccin,
     Dracula,
     Nord,
@@ -37,12 +38,20 @@ pub enum Theme {
 }
 
 impl Theme {
-    pub const ALL: [Theme; 6] =
-        [Theme::Terminal, Theme::Catppuccin, Theme::Dracula, Theme::Nord, Theme::Gruvbox, Theme::Light];
+    pub const ALL: [Theme; 7] = [
+        Theme::Terminal,
+        Theme::ShortGiraffe,
+        Theme::Catppuccin,
+        Theme::Dracula,
+        Theme::Nord,
+        Theme::Gruvbox,
+        Theme::Light,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             Theme::Terminal => "terminal",
+            Theme::ShortGiraffe => "short-giraffe",
             Theme::Catppuccin => "catppuccin",
             Theme::Dracula => "dracula",
             Theme::Nord => "nord",
@@ -91,6 +100,21 @@ impl Theme {
                 Cost => Palette(2),
                 Muted => Palette(8),
                 Error => Palette(9),
+            },
+            // ~/Work/short-giraffe palette; the model takes the coral accent, as in its pi theme.
+            Theme::ShortGiraffe => match role {
+                Path => Rgb(0xBB, 0xD2, 0xEE),
+                Worktree => Rgb(0xCF, 0xBA, 0xFA),
+                Branch => Rgb(0xF5, 0xDA, 0x7A),
+                Dirty => Rgb(0xFF, 0xB4, 0x80),
+                Clean => Rgb(0xA6, 0xCC, 0x70),
+                Issue => Rgb(0x5C, 0xCF, 0xE6),
+                Model => Rgb(0xFF, 0xB6, 0x9E),
+                Context => Rgb(0x45, 0xCA, 0xC2),
+                ContextHigh => Rgb(0xF6, 0xAB, 0xA8),
+                Cost => Rgb(0xA6, 0xCC, 0x70),
+                Muted => Rgb(0x75, 0x81, 0xA0),
+                Error => Rgb(0xF6, 0xAB, 0xA8),
             },
             Theme::Catppuccin => match role {
                 Path => Rgb(137, 180, 250),

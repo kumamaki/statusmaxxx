@@ -52,7 +52,7 @@ Command agents run a small wrapper script in `~/.config/statusmaxxx/hosts/`. It 
 
 ```toml
 segments = ["worktree", "git", "issue", "model", "context"]
-theme = "terminal"          # terminal, catppuccin, dracula, nord, gruvbox, light
+theme = "terminal"          # terminal, short-giraffe, catppuccin, dracula, nord, gruvbox, light
 icons = true
 separator = "  "
 
