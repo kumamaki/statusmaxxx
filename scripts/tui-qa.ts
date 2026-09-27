@@ -123,7 +123,7 @@ async function main(): Promise<number> {
 
     await press("down", "down", "down", "down", "down");
     const amp = await snapshot("agents-amp");
-    must(amp, "agents-amp", "Amp · available", "Can't show here: model · context");
+    must(amp, "agents-amp", "Amp · available", "Amp doesn't report its model and context, so they stay off here");
     mustNot(amp.split("\n").slice(0, 6).join("\n"), "agents-amp", "Opus");
 
     await press("enter");

@@ -46,7 +46,7 @@ fn header(app: &App, inner: usize) -> Vec<Line<'static>> {
     ];
     let missing = preview::missing(host, &app.config);
     if !missing.is_empty() {
-        header.push(Line::from(muted(format!("Can't show here: {}", segment_names(&missing)))));
+        header.push(Line::from(muted(why_missing(host, &missing))));
     }
     header
 }
@@ -239,6 +239,20 @@ fn install_summary(host: Host) -> String {
 
 fn segment_names(segments: &[Segment]) -> String {
     segments.iter().map(|segment| segment.name()).collect::<Vec<_>>().join(" · ")
+}
+
+/// `Amp doesn't report its model and context, so they stay off here`
+fn why_missing(host: Host, missing: &[Segment]) -> String {
+    let names: Vec<&str> = missing.iter().map(|segment| segment.name()).collect();
+    let names = match names.as_slice() {
+        [.., last] if names.len() > 1 => format!("{} and {last}", names[..names.len() - 1].join(", ")),
+        _ => names.join(""),
+    };
+    let rest = if missing.len() == 1 { "so it stays off here" } else { "so they stay off here" };
+    match host.tier() {
+        Tier::BuiltIn => format!("{} only shows its own items, {rest}: {names}", host.label()),
+        Tier::Command | Tier::Plugin => format!("{} doesn't report its {names}, {rest}", host.label()),
+    }
 }
 
 /// Detected agents that cannot show `segment`.
