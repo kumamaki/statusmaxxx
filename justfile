@@ -45,6 +45,10 @@ test:
 # What CI runs.
 check: lint test
 
+# Drive the TUI with tuistory in a sandbox; snapshots and screenshots land in qa-results/.
+qa: build
+    bun scripts/tui-qa.ts
+
 # Scan history and uncommitted changes for secrets.
 secrets:
     gitleaks git --no-banner --redact

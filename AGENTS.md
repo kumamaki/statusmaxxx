@@ -42,6 +42,7 @@ src/
 ```bash
 just                      # list recipes
 just check                # fmt --check, clippy -D warnings, tests — same as CI
+just qa                   # tuistory product QA of the TUI → qa-results/
 just config               # TUI from source
 just run status           # any CLI command from source
 just render claude        # replay the session JSON an agent last sent
@@ -83,6 +84,10 @@ Before trusting a new agent's docs, record a real payload: run it once, then rea
 | Session-start hook | Claude Code (`claude -p --settings`), Droid (`droid exec --settings`), Cursor (project `.cursor/hooks.json`, `agent -p --trust`) | Qwen, Copilot |
 
 Check a hook live by asking the agent, one-shot, to quote any context line that starts with `statusmaxxx:`.
+
+ANSI in plugin status areas, checked with tuistory: pi renders it, Amp prints the escapes literally. `Output::Json { colored }` follows that.
+
+TUI changes: `just qa` drives every screen with tuistory in a sandbox and writes text and PNG captures to `qa-results/`. Look at the PNGs, not only the text.
 
 ## Adding an agent
 
