@@ -1,6 +1,6 @@
 # statusmaxxx
 
-One status line for every coding agent. You configure it once, and each agent shows the same segments: worktree, git, the Linear issue you are on, model, context, and cost.
+One status line for every coding agent. You configure it once, and each agent shows the same segments: worktree, git, the issue the agent is working on, model, context, and cost.
 
 ```
  app:app-auth   mehdi/eng-42-fix-auth ±1   ENG-42 Fix the auth flow (In Review) +2  󰚩 Opus 5.5   42%
@@ -25,7 +25,7 @@ statusmaxxx status
 statusmaxxx uninstall amp
 ```
 
-`install` saves whatever status line it replaces, and `uninstall` puts it back. Every settings file it edits also gets a `<file>.statusmaxxx.bak` copy.
+`install` saves whatever status line it replaces, and `uninstall` puts it back. Every settings file it edits also gets a `<file>.statusmaxxx.bak` copy. `install` also adds a short marked instruction to the agent's global instructions file, telling it to set its issue (see [Issues](#issues)); `uninstall` removes it.
 
 ## Agents
 
@@ -42,7 +42,7 @@ statusmaxxx uninstall amp
 | Codex CLI | its own `tui.status_line` items | `~/.codex/config.toml` |
 | Gemini CLI | its own `ui.footer.items` | `~/.gemini/settings.json` |
 
-Codex and Gemini cannot show custom text, so they only get the segments they have an item for. For them, worktree and Linear are not available.
+Codex and Gemini cannot show custom text, so they only get the segments they have an item for. For them, worktree and issue are not available.
 
 Command agents run a small wrapper script in `~/.config/statusmaxxx/hosts/`. It calls `statusmaxxx render --host <agent>` with the session JSON on stdin. Plugin agents run a generated shim that calls the same command.
 
@@ -51,49 +51,41 @@ Command agents run a small wrapper script in `~/.config/statusmaxxx/hosts/`. It 
 `~/.config/statusmaxxx/config.toml`, written by the TUI:
 
 ```toml
-segments = ["worktree", "git", "linear", "model", "context"]
+segments = ["worktree", "git", "issue", "model", "context"]
 theme = "terminal"          # terminal, catppuccin, dracula, nord, gruvbox, light
 icons = true
 separator = "  "
 
 [hosts.amp]                 # Amp shows its own model, so it gets its own list
-segments = ["worktree", "git", "linear"]
+segments = ["worktree", "git", "issue"]
 ```
 
-Segments: `directory`, `worktree`, `git`, `linear`, `model`, `context`, `cost`. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
+Segments: `directory`, `worktree`, `git`, `issue`, `model`, `context`, `cost`. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
 
-## Linear
+## Issues
 
-Status lines re-run every few hundred milliseconds, so `render` only reads a local cache. `statusmaxxx linear refresh` fills it with these:
-
-- Your issues in a started state.
-- Every issue key a branch showed in the last week. `mehdi/eng-42-fix-auth` becomes `ENG-42`, and only for teams you belong to.
-
-The refresh reads a [personal API key](https://linear.app/settings/account/security) from `LINEAR_API_KEY`:
+The agent knows which issue it is working on, because it read it from the tracker, so it sets the issue itself:
 
 ```sh
-op run --env-file=~/.env.secrets -- statusmaxxx linear refresh
+statusmaxxx issue set ENG-42 "Fix the auth flow" --state "In Progress" --url https://linear.app/…
+statusmaxxx issue set ENG-42 --state "In Review"     # fields left out keep their value
+statusmaxxx issue add ENG-43                          # more than one issue
+statusmaxxx issue clear                               # or: clear ENG-43
+statusmaxxx issue show
 ```
 
-To run it every five minutes, use `~/Library/LaunchAgents/dev.statusmaxxx.linear.plist`:
+Issues are kept per worktree, in that worktree's own git dir. They survive restarts, every linked worktree has its own list, and nothing shows up in `git status`. Any tracker works: the id is just text.
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>dev.statusmaxxx.linear</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/bin/zsh</string><string>-lc</string>
-    <string>op run --env-file="$HOME/.env.secrets" -- statusmaxxx linear refresh</string>
-  </array>
-  <key>StartInterval</key><integer>300</integer>
-</dict>
-</plist>
-```
+`install` teaches the agent to do this by adding a marked block to its global instructions:
 
-Load it with `launchctl load ~/Library/LaunchAgents/dev.statusmaxxx.linear.plist`. For `op` to work unattended, the 1Password app must be unlocked.
+| Agent | File |
+|---|---|
+| Claude Code | `~/.claude/CLAUDE.md` |
+| Qwen Code | `~/.qwen/QWEN.md` |
+| Droid, Amp, pi, OpenCode | their global `AGENTS.md` |
+| Copilot CLI | `~/.copilot/instructions/statusmaxxx.instructions.md` |
+
+Cursor has no global instructions file, so add the same line to its user rules yourself.
 
 ## Debugging
 

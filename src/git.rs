@@ -6,6 +6,8 @@ use anyhow::{Context, Result, bail};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Repo {
     pub root: PathBuf,
+    /// This worktree's own git dir, for state that belongs to one checkout.
+    pub git_dir: PathBuf,
     pub name: String,
     /// Folder name of a linked worktree; `None` in the main checkout.
     pub worktree: Option<String>,
@@ -19,15 +21,6 @@ pub enum Head {
     Detached(String),
 }
 
-impl Head {
-    pub fn branch(&self) -> Option<&str> {
-        match self {
-            Head::Branch(name) => Some(name),
-            Head::Detached(_) => None,
-        }
-    }
-}
-
 impl Repo {
     /// `Ok(None)` outside a repository; any other git failure is an error.
     pub fn discover(cwd: &Path) -> Result<Option<Self>> {
@@ -37,7 +30,14 @@ impl Repo {
         let status = git(&layout.root, &["status", "--porcelain=v2", "--branch"])?;
         let (head, changed_files) = parse_status(&status)?;
         let worktree = (layout.git_dir != layout.common_dir).then(|| folder_name(&layout.root));
-        Ok(Some(Self { name: repository_name(&layout.common_dir), root: layout.root, worktree, head, changed_files }))
+        Ok(Some(Self {
+            name: repository_name(&layout.common_dir),
+            root: layout.root,
+            git_dir: layout.git_dir,
+            worktree,
+            head,
+            changed_files,
+        }))
     }
 }
 

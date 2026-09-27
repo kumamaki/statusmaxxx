@@ -5,17 +5,17 @@ A single Rust binary that renders one status line for many coding agents and wir
 ## Rules
 
 - No emojis in code, output, or docs. Icons are Nerd Font code points written as `\u{…}` escapes.
-- `render` runs on every status refresh. It must never touch the network and must stay fast: git runs only when a git segment is enabled, and Linear is read from the cache.
+- `render` runs on every status refresh. It must never touch the network and must stay fast: git runs only when a segment needs the repository.
 - Never hand-edit an agent's config in tests or experiments. Use a sandbox `HOME` (every path derives from it), or the agent's own override flag, such as `claude --settings <file>`, `droid --settings <file>`, or `codex -c key=value`.
 
 ## Layout
 
 ```
 src/
-  main.rs        CLI: config (TUI), render, install, uninstall, status, linear refresh
+  main.rs        CLI: config (TUI), render, install, uninstall, status, issue
   payload.rs     stdin JSON (Claude Code shape) → Session
-  git.rs         repo name, linked worktree, head, changed files
-  linear.rs      cache, branch → issue key, refresh over GraphQL
+  git.rs         repo name, linked worktree, git dir, head, changed files
+  issue.rs       issues the agent set, stored in the worktree's git dir
   segment.rs     Segment enum → Pieces (text + Role + url)
   render.rs      Pieces → ANSI line, or {"text","url"} JSON for plugin shims
   theme.rs       Role → color per theme
@@ -27,13 +27,14 @@ src/
     plugin.rs    shim agents (Amp, pi, OpenCode); shims/ holds their sources
     builtin.rs   item-only agents (Codex, Gemini): segment → item id mapping
     settings.rs  JSON settings editing with backup; refuses JSONC
+    instructions.rs  marked block in the agent's global instructions telling it to set its issue
     replaced.rs  remembers what install replaced so uninstall restores it
 ```
 
 ## Adding an agent
 
 1. Add the variant to `Host` and to `Host::ALL`, `id`, `label`, `tier`, `home`, and `note`.
-2. Add its entry to the tier module: a `Target` in `command.rs`, a `Shim` in `plugin.rs`, or item ids in `builtin.rs`.
+2. Add its entry to the tier module: a `Target` in `command.rs`, a `Shim` in `plugin.rs`, or item ids in `builtin.rs`. Add its global instructions file to `instructions.rs`.
 3. Record a real payload before trusting the docs. Point the agent at a wrapper using its override flag, then read `~/.cache/statusmaxxx/payloads/<host>.json`.
 
 ## Verification status

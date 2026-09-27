@@ -5,6 +5,7 @@
 
 mod builtin;
 mod command;
+mod instructions;
 mod plugin;
 mod replaced;
 pub mod settings;
@@ -136,7 +137,7 @@ impl Host {
                 "TUI plugin in the app_bottom slot. OpenCode documents this API only in its repository spec."
             }
             Host::Codex | Host::Gemini => {
-                "Only the agent's own items can show, so worktree and Linear are not available."
+                "Only the agent's own items can show, so worktree and issue are not available."
             }
         }
     }
@@ -179,19 +180,23 @@ impl Host {
 
     /// Returns one line per file written.
     pub fn install(self, config: &Config) -> Result<Vec<String>> {
-        match self.tier() {
-            Tier::Command => command::install(self),
-            Tier::Plugin => plugin::install(self),
-            Tier::BuiltIn => builtin::install(self, config),
-        }
+        let mut report = match self.tier() {
+            Tier::Command => command::install(self)?,
+            Tier::Plugin => plugin::install(self)?,
+            Tier::BuiltIn => builtin::install(self, config)?,
+        };
+        report.extend(instructions::install(self)?);
+        Ok(report)
     }
 
     pub fn uninstall(self) -> Result<Vec<String>> {
-        match self.tier() {
-            Tier::Command => command::uninstall(self),
-            Tier::Plugin => plugin::uninstall(self),
-            Tier::BuiltIn => builtin::uninstall(self),
-        }
+        let mut report = match self.tier() {
+            Tier::Command => command::uninstall(self)?,
+            Tier::Plugin => plugin::uninstall(self)?,
+            Tier::BuiltIn => builtin::uninstall(self)?,
+        };
+        report.extend(instructions::uninstall(self)?);
+        Ok(report)
     }
 }
 

@@ -29,7 +29,7 @@ pub struct HostOverride {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            segments: vec![Segment::Worktree, Segment::Git, Segment::Linear, Segment::Model, Segment::Context],
+            segments: vec![Segment::Worktree, Segment::Git, Segment::Issue, Segment::Model, Segment::Context],
             theme: Theme::default(),
             icons: true,
             separator: "  ".to_string(),
@@ -75,9 +75,9 @@ mod tests {
     #[test]
     fn host_overrides_replace_the_shared_segments() {
         let config: Config =
-            toml::from_str("segments = [\"git\", \"model\"]\n[hosts.amp]\nsegments = [\"worktree\", \"linear\"]\n")
+            toml::from_str("segments = [\"git\", \"model\"]\n[hosts.amp]\nsegments = [\"worktree\", \"issue\"]\n")
                 .unwrap();
         assert_eq!(config.segments_for(Host::Claude), [Segment::Git, Segment::Model]);
-        assert_eq!(config.segments_for(Host::Amp), [Segment::Worktree, Segment::Linear]);
+        assert_eq!(config.segments_for(Host::Amp), [Segment::Worktree, Segment::Issue]);
     }
 }

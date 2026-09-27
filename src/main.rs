@@ -1,7 +1,7 @@
 mod config;
 mod git;
 mod host;
-mod linear;
+mod issue;
 mod paths;
 mod payload;
 mod render;
@@ -12,10 +12,12 @@ mod tui;
 use std::io::{self, IsTerminal, Read, Write};
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 use crate::config::Config;
+use crate::git::Repo;
 use crate::host::{Host, InstallState};
+use crate::issue::{Issue, Issues};
 use crate::payload::Payload;
 
 /// One status line for every coding agent.
@@ -47,17 +49,40 @@ enum Command {
     },
     /// Show which agents are detected and wired up.
     Status,
-    /// Linear issue cache.
-    Linear {
+    /// Issues shown for the current worktree. Agents run these as they pick up and land work.
+    Issue {
         #[command(subcommand)]
-        command: LinearCommand,
+        command: IssueCommand,
     },
 }
 
 #[derive(Subcommand)]
-enum LinearCommand {
-    /// Fetch issues into the cache. Reads the key from `LINEAR_API_KEY`.
-    Refresh,
+enum IssueCommand {
+    /// Show only this issue. Fields left out keep their stored value.
+    Set(IssueArgs),
+    /// Add an issue, or update it when its id is already set.
+    Add(IssueArgs),
+    /// Remove one issue, or all of them without an id.
+    Clear { id: Option<String> },
+    /// Print the issues set here.
+    Show,
+}
+
+#[derive(Args)]
+struct IssueArgs {
+    /// Tracker id, e.g. ENG-42.
+    id: String,
+    title: Option<String>,
+    #[arg(long)]
+    state: Option<String>,
+    #[arg(long)]
+    url: Option<String>,
+}
+
+impl From<IssueArgs> for Issue {
+    fn from(args: IssueArgs) -> Self {
+        Issue { id: args.id, title: args.title, state: args.state, url: args.url }
+    }
 }
 
 fn main() -> Result<()> {
@@ -67,7 +92,7 @@ fn main() -> Result<()> {
         Command::Install { hosts } => each_host(&hosts, |host, config| host.install(config)),
         Command::Uninstall { hosts } => each_host(&hosts, |host, _| host.uninstall()),
         Command::Status => status(),
-        Command::Linear { command: LinearCommand::Refresh } => refresh_linear(),
+        Command::Issue { command } => issue(command),
     }
 }
 
@@ -112,31 +137,29 @@ fn status() -> Result<()> {
         };
         println!("{:<14} {state}", host.label());
     }
-    match linear::Cache::load()? {
-        Some(cache) => println!(
-            "\nLinear cache: {} started, {} branch issues, {} teams",
-            cache.started.len(),
-            cache.branch_issues.len(),
-            cache.team_keys.len()
-        ),
-        None => println!("\nLinear cache: empty (run `statusmaxxx linear refresh`)"),
-    }
-    println!("Config: {}", paths::display(&paths::config_file()?));
+    println!("\nConfig: {}", paths::display(&paths::config_file()?));
     Ok(())
 }
 
-fn refresh_linear() -> Result<()> {
-    let Some(api_key) = std::env::var("LINEAR_API_KEY").ok().filter(|key| !key.is_empty()) else {
-        bail!(
-            "LINEAR_API_KEY is not set; run it under your secret manager, e.g. `op run -- statusmaxxx linear refresh`"
-        );
+fn issue(command: IssueCommand) -> Result<()> {
+    let cwd = std::env::current_dir().context("Cannot resolve the working directory")?;
+    let Some(repo) = Repo::discover(&cwd)? else {
+        bail!("Issues are kept per worktree, and <{}> is not in a git repository", cwd.display());
     };
-    let cache = linear::refresh(&api_key)?;
-    println!(
-        "Cached <{}> started and <{}> branch issues across <{}> teams",
-        cache.started.len(),
-        cache.branch_issues.len(),
-        cache.team_keys.len()
-    );
-    Ok(())
+    let mut issues = Issues::of(&repo)?;
+    match command {
+        IssueCommand::Set(args) => issues.set(args.into()),
+        IssueCommand::Add(args) => issues.add(args.into()),
+        IssueCommand::Clear { id: Some(id) } => issues.remove(&id)?,
+        IssueCommand::Clear { id: None } => issues.clear(),
+        IssueCommand::Show => {
+            for issue in &issues.list {
+                let details: Vec<&str> =
+                    [&issue.title, &issue.state, &issue.url].into_iter().flatten().map(String::as_str).collect();
+                println!("{}  {}", issue.id, details.join(" · "));
+            }
+            return Ok(());
+        }
+    }
+    issues.save()
 }

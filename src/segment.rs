@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use crate::git::{Head, Repo};
-use crate::linear;
+use crate::issue::Issues;
 use crate::paths;
 use crate::payload::Session;
 use crate::theme::Role;
@@ -18,7 +18,7 @@ pub enum Segment {
     Directory,
     Worktree,
     Git,
-    Linear,
+    Issue,
     Model,
     Context,
     Cost,
@@ -29,7 +29,7 @@ impl Segment {
         Segment::Directory,
         Segment::Worktree,
         Segment::Git,
-        Segment::Linear,
+        Segment::Issue,
         Segment::Model,
         Segment::Context,
         Segment::Cost,
@@ -40,7 +40,7 @@ impl Segment {
             Segment::Directory => "directory",
             Segment::Worktree => "worktree",
             Segment::Git => "git",
-            Segment::Linear => "linear",
+            Segment::Issue => "issue",
             Segment::Model => "model",
             Segment::Context => "context",
             Segment::Cost => "cost",
@@ -52,7 +52,7 @@ impl Segment {
             Segment::Directory => "Working directory, relative to the repository",
             Segment::Worktree => "Repository, plus the linked worktree you are in",
             Segment::Git => "Branch and number of changed files",
-            Segment::Linear => "Linear issue of this branch and your other started issues",
+            Segment::Issue => "Issues the agent set with `statusmaxxx issue set`",
             Segment::Model => "Model the agent reports",
             Segment::Context => "Context window used",
             Segment::Cost => "Session cost the agent reports",
@@ -64,7 +64,7 @@ impl Segment {
             Segment::Directory => "\u{f07b}",
             Segment::Worktree => "\u{f401}",
             Segment::Git => "\u{e725}",
-            Segment::Linear => "\u{f41b}",
+            Segment::Issue => "\u{f41b}",
             Segment::Model => "\u{f06a9}",
             Segment::Context => "\u{f200}",
             Segment::Cost => "",
@@ -88,31 +88,22 @@ impl Piece {
     }
 }
 
-/// Everything segments read. Git and Linear are loaded on first use so a line
-/// without those segments never pays for them.
+/// Everything segments read. Git is loaded on first use so a line without git
+/// segments never pays for it.
 pub struct Sources<'a> {
     session: &'a Session,
     icons: bool,
     repo: OnceCell<Result<Option<Repo>, String>>,
-    linear: OnceCell<Result<Option<linear::Cache>, String>>,
 }
 
 impl<'a> Sources<'a> {
     pub fn new(session: &'a Session, icons: bool) -> Self {
-        Self { session, icons, repo: OnceCell::new(), linear: OnceCell::new() }
+        Self { session, icons, repo: OnceCell::new() }
     }
 
     fn repo(&self) -> Result<Option<&Repo>> {
         self.repo
             .get_or_init(|| Repo::discover(&self.session.cwd).map_err(|error| format!("{error:#}")))
-            .as_ref()
-            .map(Option::as_ref)
-            .map_err(|error| anyhow!("{error}"))
-    }
-
-    fn linear(&self) -> Result<Option<&linear::Cache>> {
-        self.linear
-            .get_or_init(|| linear::Cache::load().map_err(|error| format!("{error:#}")))
             .as_ref()
             .map(Option::as_ref)
             .map_err(|error| anyhow!("{error}"))
@@ -142,7 +133,10 @@ impl Segment {
                 Some(repo) => git(repo, sources),
                 None => vec![],
             },
-            Segment::Linear => linear_issues(sources)?,
+            Segment::Issue => match sources.repo()? {
+                Some(repo) => issues(&Issues::of(repo)?, sources),
+                None => vec![],
+            },
             Segment::Model => {
                 session.model.iter().map(|model| Piece::new(Role::Model, sources.label(self, model))).collect()
             }
@@ -199,49 +193,24 @@ fn git(repo: &Repo, sources: &Sources) -> Vec<Piece> {
     vec![Piece::new(Role::Branch, sources.label(Segment::Git, &head)), status]
 }
 
-fn linear_issues(sources: &Sources) -> Result<Vec<Piece>> {
-    // No cache means Linear was never set up; that is not worth a warning on every line.
-    let Some(cache) = sources.linear()? else {
-        return Ok(vec![]);
+/// The first issue in full, the rest by id.
+fn issues(issues: &Issues, sources: &Sources) -> Vec<Piece> {
+    let Some((first, rest)) = issues.list.split_first() else {
+        return vec![];
     };
-    let branch_key = sources.repo()?.and_then(|repo| repo.head.branch()).and_then(|branch| cache.issue_key(branch));
-    let others: Vec<&str> = cache
-        .started
-        .iter()
-        .map(|issue| issue.identifier.as_str())
-        .filter(|identifier| Some(*identifier) != branch_key.as_deref())
-        .collect();
-
-    let mut pieces = Vec::new();
-    match &branch_key {
-        Some(key) => {
-            linear::record_seen(key)?;
-            match cache.issue(key) {
-                Some(issue) => {
-                    let text = format!("{} {}", issue.identifier, truncate(&issue.title, TITLE_LIMIT));
-                    pieces.push(Piece {
-                        url: Some(issue.url.clone()),
-                        ..Piece::new(Role::Issue, sources.label(Segment::Linear, &text))
-                    });
-                    pieces.push(Piece::new(Role::Muted, format!(" ({})", issue.state)));
-                }
-                // Seen for the first time: the next refresh fills in the title.
-                None => pieces.push(Piece::new(Role::Issue, sources.label(Segment::Linear, key))),
-            }
-            if !others.is_empty() {
-                pieces.push(Piece::new(Role::Muted, format!(" +{}", others.len())));
-            }
-        }
-        None if !others.is_empty() => {
-            let shown = others.iter().take(2).copied().collect::<Vec<_>>().join(" ");
-            pieces.push(Piece::new(Role::Issue, sources.label(Segment::Linear, &shown)));
-            if others.len() > 2 {
-                pieces.push(Piece::new(Role::Muted, format!(" +{}", others.len() - 2)));
-            }
-        }
-        None => {}
+    let text = match &first.title {
+        Some(title) => format!("{} {}", first.id, truncate(title, TITLE_LIMIT)),
+        None => first.id.clone(),
+    };
+    let mut pieces =
+        vec![Piece { url: first.url.clone(), ..Piece::new(Role::Issue, sources.label(Segment::Issue, &text)) }];
+    if let Some(state) = &first.state {
+        pieces.push(Piece::new(Role::Muted, format!(" ({state})")));
     }
-    Ok(pieces)
+    for issue in rest {
+        pieces.push(Piece { url: issue.url.clone(), ..Piece::new(Role::Issue, format!(" {}", issue.id)) });
+    }
+    pieces
 }
 
 fn truncate(text: &str, limit: usize) -> String {
@@ -261,6 +230,7 @@ mod tests {
     fn repo(worktree: Option<&str>) -> Repo {
         Repo {
             root: PathBuf::from("/work/app"),
+            git_dir: PathBuf::from("/work/app/.git"),
             name: "app".into(),
             worktree: worktree.map(str::to_string),
             head: Head::Branch("main".into()),

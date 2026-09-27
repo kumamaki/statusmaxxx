@@ -310,7 +310,7 @@ impl App {
             row("t", "theme", self.config.theme.name().to_string()),
             row("n", "icons", if self.config.icons { "on (Nerd Font)".into() } else { "off".into() }),
             Line::default(),
-            Line::from(" Linear: statusmaxxx linear refresh").dark_gray(),
+            Line::from(" issue: statusmaxxx issue set <id>").dark_gray(),
         ];
         frame.render_widget(Paragraph::new(lines).block(pane_block(" Options ", false)), area);
     }
