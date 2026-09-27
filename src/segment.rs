@@ -1,4 +1,5 @@
 use std::cell::OnceCell;
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
@@ -12,7 +13,7 @@ use crate::theme::Role;
 
 const TITLE_LIMIT: usize = 36;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Segment {
     Directory,
@@ -59,7 +60,11 @@ impl Segment {
         }
     }
 
-    fn icon(self) -> &'static str {
+    pub fn has_icon(self) -> bool {
+        !self.icon().is_empty()
+    }
+
+    pub fn icon(self) -> &'static str {
         match self {
             Segment::Directory => "\u{f07b}",
             Segment::Worktree => "\u{f401}",
@@ -92,12 +97,12 @@ impl Piece {
 /// segments never pays for it.
 pub struct Sources<'a> {
     session: &'a Session,
-    icons: bool,
+    icons: &'a BTreeSet<Segment>,
     repo: OnceCell<Result<Option<Repo>, String>>,
 }
 
 impl<'a> Sources<'a> {
-    pub fn new(session: &'a Session, icons: bool) -> Self {
+    pub fn new(session: &'a Session, icons: &'a BTreeSet<Segment>) -> Self {
         Self { session, icons, repo: OnceCell::new() }
     }
 
@@ -110,11 +115,12 @@ impl<'a> Sources<'a> {
     }
 
     fn label(&self, segment: Segment, text: &str) -> String {
-        self.labeled(segment.icon(), text)
+        self.labeled(segment, segment.icon(), text)
     }
 
-    fn labeled(&self, icon: &str, text: &str) -> String {
-        if self.icons && !icon.is_empty() { format!("{icon} {text}") } else { text.to_string() }
+    /// `icon text` when `segment` has icons on; `icon` may differ from the segment's own.
+    fn labeled(&self, segment: Segment, icon: &str, text: &str) -> String {
+        if self.icons.contains(&segment) && !icon.is_empty() { format!("{icon} {text}") } else { text.to_string() }
     }
 }
 
@@ -172,7 +178,7 @@ fn directory(cwd: &Path, repo: Option<&Repo>) -> String {
 fn worktree(repo: &Repo, sources: &Sources) -> Vec<Piece> {
     match &repo.worktree {
         Some(worktree) => vec![
-            Piece::new(Role::Worktree, sources.labeled(LINKED_WORKTREE_ICON, &repo.name)),
+            Piece::new(Role::Worktree, sources.labeled(Segment::Worktree, LINKED_WORKTREE_ICON, &repo.name)),
             Piece::new(Role::Muted, ":"),
             Piece::new(Role::Worktree, worktree.as_str()),
         ],
@@ -250,7 +256,8 @@ mod tests {
     fn linked_worktrees_show_their_folder_after_the_repository() {
         let session =
             Session { cwd: PathBuf::from("/work/app"), model: None, context_used_percent: None, cost_usd: None };
-        let sources = Sources::new(&session, false);
+        let no_icons = BTreeSet::new();
+        let sources = Sources::new(&session, &no_icons);
         let text: String = worktree(&repo(Some("app-auth")), &sources).into_iter().map(|piece| piece.text).collect();
         assert_eq!(text, "app:app-auth");
         let text: String = worktree(&repo(None), &sources).into_iter().map(|piece| piece.text).collect();

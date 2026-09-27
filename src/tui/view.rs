@@ -5,7 +5,7 @@ use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr;
 
 use super::card::{self, Card, chip, focus, muted, spread, text};
-use super::{AGENT_ITEMS, AgentItem, App, HOME, HomeItem, LOOK, LookItem, Screen, preview};
+use super::{AGENT_ITEMS, AgentItem, App, HOME, HomeItem, Screen, preview};
 use crate::host::{Host, InstallState, Tier};
 use crate::segment::Segment;
 use crate::theme::Theme;
@@ -17,7 +17,7 @@ pub fn card(app: &App, width: usize) -> (Card, usize) {
         Screen::Segments(host) => segments(app, host, inner),
         Screen::Agents => agents(app, inner),
         Screen::Agent(host) => agent(app, host, inner),
-        Screen::Look => look(app, inner),
+        Screen::Theme => theme(app, inner),
     };
     let mut body = body;
     if !app.notice.is_empty() {
@@ -56,14 +56,35 @@ fn agent_control(host: Host, cycles: bool) -> Line<'static> {
 
 /// Screens where ←/→ belong to the preview rather than to a choice row.
 pub fn cycles_preview(screen: Screen) -> bool {
-    matches!(screen, Screen::Home | Screen::Segments(None))
+    screen == Screen::Home
+}
+
+/// Cells before a segment name: its icon when on, blank when off, so names never shift.
+const ICON_SLOT: usize = 3;
+
+fn icon_slot(app: &App, segment: Segment) -> Span<'static> {
+    if app.config.icons.contains(&segment) {
+        let icon = segment.icon();
+        text(format!("{icon}{}", " ".repeat(ICON_SLOT.saturating_sub(icon.width()))))
+    } else {
+        Span::raw(" ".repeat(ICON_SLOT))
+    }
+}
+
+/// `◂ shown ▸` on the focused row; the value keeps its column on every row.
+fn shown_stepper(state: Span<'static>, focused: bool) -> Vec<Span<'static>> {
+    let arrow = |glyph: &str| if focused { muted(glyph) } else { Span::raw(" ".repeat(glyph.width())) };
+    let mut spans = vec![arrow("◂ ")];
+    spans.extend(card::slot(state, "hidden".width()));
+    spans.push(arrow(" ▸"));
+    spans
 }
 
 fn previewed(app: &App) -> Host {
     match app.screen {
         Screen::Agents => app.agents[app.cursor].host,
         Screen::Agent(host) | Screen::Segments(Some(host)) => host,
-        Screen::Home | Screen::Segments(None) | Screen::Look => app.preview_host,
+        Screen::Home | Screen::Segments(None) | Screen::Theme => app.preview_host,
     }
 }
 
@@ -82,7 +103,7 @@ fn home(app: &App) -> Screenful {
         let (name, description) = match item {
             HomeItem::Segments => ("Segments", segment_names(&app.config.segments)),
             HomeItem::Agents => ("Agents", agent_counts(app)),
-            HomeItem::Look => ("Look", look_summary(app)),
+            HomeItem::Theme => ("Theme", app.config.theme.name().to_string()),
             HomeItem::Quit => ("Quit", String::new()),
         };
         body.push(Line::from(name_span(name, index == app.cursor, true)));
@@ -93,7 +114,7 @@ fn home(app: &App) -> Screenful {
     let hint = match HOME[app.cursor] {
         HomeItem::Segments => "Choose what the line shows, and in what order",
         HomeItem::Agents => "Install into Claude Code, Amp, and the others you use",
-        HomeItem::Look => "Theme and icons",
+        HomeItem::Theme => "Colors of the status line",
         HomeItem::Quit => "Changes are saved as you make them",
     };
     (body, focus_line, hint.to_string())
@@ -120,17 +141,23 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
             (false, true) => text("shown"),
             (false, false) => muted("hidden"),
         };
-        body.push(spread(vec![name_span(segment.name(), focused, *shown)], vec![state], inner));
-        body.push(Line::from(match host {
-            Some(host) if !host.supports(*segment) => focus(format!("{} cannot show this", host.label())),
-            Some(_) => muted(segment.description()),
-            None => muted(with_gaps(segment.description(), &agents_without(app, *segment))),
-        }));
+        let mut name = vec![icon_slot(app, *segment)];
+        name.push(name_span(segment.name(), focused, *shown));
+        body.push(spread(name, shown_stepper(state, focused && !app.moving), inner));
+        let description = match host {
+            Some(host) if !host.supports(*segment) => format!("{} cannot show this", host.label()),
+            Some(_) => segment.description().to_string(),
+            None => with_gaps(segment.description(), &agents_without(app, *segment)),
+        };
+        body.push(Line::from(vec![Span::raw(" ".repeat(ICON_SLOT)), muted(description)]));
     }
-    let hint = match (app.moving, rows[app.cursor].1) {
-        (true, _) => "↑/↓ moves it · enter puts it down",
-        (false, true) => "space hides it · m moves it · esc back",
-        (false, false) => "space shows it · m moves it · esc back",
+    let (segment, shown) = rows[app.cursor];
+    let hint = match (app.moving, shown, segment.has_icon()) {
+        (true, _, _) => "↑/↓ moves it · enter puts it down",
+        (false, true, true) => "←/→ hides it · i toggles its icon · m moves it",
+        (false, true, false) => "←/→ hides it · m moves it · esc back",
+        (false, false, true) => "←/→ shows it · i toggles its icon · m moves it",
+        (false, false, false) => "←/→ shows it · m moves it · esc back",
     };
     (body, focus_line, hint.to_string())
 }
@@ -197,27 +224,9 @@ fn agent(app: &App, host: Host, inner: usize) -> Screenful {
     (body, focus_line, hint)
 }
 
-fn look(app: &App, inner: usize) -> Screenful {
-    let mut body = Vec::new();
-    for (index, item) in LOOK.iter().enumerate() {
-        let focused = index == app.cursor;
-        if index > 0 {
-            body.push(Line::default());
-        }
-        let (name, chips) = match item {
-            LookItem::Theme => ("Theme", theme_picker(app.config.theme, focused)),
-            LookItem::Icons => (
-                "Icons",
-                vec![chip("On", app.config.icons, focused), muted("  "), chip("Off", !app.config.icons, focused)],
-            ),
-        };
-        body.push(spread(vec![name_span(name, focused, true)], chips, inner));
-    }
-    let hint = match LOOK[app.cursor] {
-        LookItem::Theme => "←/→ picks a theme · esc back",
-        LookItem::Icons => "←/→ switches Nerd Font icons · esc back",
-    };
-    (body, app.cursor * 2, hint.to_string())
+fn theme(app: &App, inner: usize) -> Screenful {
+    let body = vec![spread(vec![name_span("Theme", true, true)], theme_picker(app.config.theme, true), inner)];
+    (body, 0, "←/→ picks a theme · esc back".to_string())
 }
 
 /// `◂ short-giraffe ▸`: one picked value, since the full list outgrows narrow cards.
@@ -296,11 +305,6 @@ fn agent_counts(app: &App) -> String {
     let installed = app.agents.iter().filter(|row| row.detected && row.state == InstallState::Installed).count();
     let detected = app.agents.iter().filter(|row| row.detected).count();
     format!("{installed} installed · {} available · {} not found", detected - installed, app.agents.len() - detected)
-}
-
-fn look_summary(app: &App) -> String {
-    let icons = if app.config.icons { "Nerd Font icons" } else { "no icons" };
-    format!("{} theme · {icons}", app.config.theme.name())
 }
 
 fn wrap(text: &str, width: usize) -> Vec<String> {

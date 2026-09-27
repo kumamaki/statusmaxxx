@@ -32,18 +32,18 @@ enum Screen {
     Segments(Option<Host>),
     Agents,
     Agent(Host),
-    Look,
+    Theme,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HomeItem {
     Segments,
     Agents,
-    Look,
+    Theme,
     Quit,
 }
 
-const HOME: [HomeItem; 4] = [HomeItem::Segments, HomeItem::Agents, HomeItem::Look, HomeItem::Quit];
+const HOME: [HomeItem; 4] = [HomeItem::Segments, HomeItem::Agents, HomeItem::Theme, HomeItem::Quit];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AgentItem {
@@ -53,14 +53,6 @@ enum AgentItem {
 }
 
 const AGENT_ITEMS: [AgentItem; 3] = [AgentItem::Install, AgentItem::Uninstall, AgentItem::Segments];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LookItem {
-    Theme,
-    Icons,
-}
-
-const LOOK: [LookItem; 2] = [LookItem::Theme, LookItem::Icons];
 
 struct AgentRow {
     host: Host,
@@ -74,7 +66,7 @@ struct App {
     sample: Session,
     screen: Screen,
     cursor: usize,
-    /// The agent Home and Look preview; ←/→ on Home cycles it.
+    /// The agent Home and Theme preview; ←/→ on Home cycles it.
     preview_host: Host,
     /// Outcome of the last action on this screen.
     notice: Vec<Line<'static>>,
@@ -150,6 +142,7 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => self.move_cursor(-1),
             KeyCode::Down | KeyCode::Char('j') => self.move_cursor(1),
             KeyCode::Char('m') if matches!(self.screen, Screen::Segments(_)) => self.moving = true,
+            KeyCode::Char('i') if matches!(self.screen, Screen::Segments(_)) => self.toggle_icon(),
             KeyCode::Left | KeyCode::Char('h') => self.step(-1),
             KeyCode::Right | KeyCode::Char('l') => self.step(1),
             KeyCode::Enter | KeyCode::Char(' ') => self.activate(),
@@ -163,7 +156,7 @@ impl App {
             Screen::Segments(_) => Segment::ALL.len(),
             Screen::Agents => self.agents.len(),
             Screen::Agent(_) => AGENT_ITEMS.len(),
-            Screen::Look => LOOK.len(),
+            Screen::Theme => 1,
         }
     }
 
@@ -190,7 +183,7 @@ impl App {
             Screen::Home => self.done = true,
             Screen::Segments(None) => self.open(Screen::Home, 0),
             Screen::Agents => self.open(Screen::Home, 1),
-            Screen::Look => self.open(Screen::Home, 2),
+            Screen::Theme => self.open(Screen::Home, 2),
             Screen::Agent(host) => self.open(Screen::Agents, self.agent_index(host)),
             Screen::Segments(Some(host)) => self.open(Screen::Agent(host), 2),
         }
@@ -201,7 +194,7 @@ impl App {
             Screen::Home => match HOME[self.cursor] {
                 HomeItem::Segments => self.open(Screen::Segments(None), 0),
                 HomeItem::Agents => self.open(Screen::Agents, 0),
-                HomeItem::Look => self.open(Screen::Look, 0),
+                HomeItem::Theme => self.open(Screen::Theme, 0),
                 HomeItem::Quit => self.done = true,
             },
             Screen::Segments(host) => self.toggle_segment(host),
@@ -217,7 +210,7 @@ impl App {
                     self.open(Screen::Segments(Some(host)), 0);
                 }
             },
-            Screen::Look => self.step(1),
+            Screen::Theme => self.step(1),
         }
     }
 
@@ -240,21 +233,15 @@ impl App {
                 }
                 self.save();
             }
-            Screen::Look => {
-                match LOOK[self.cursor] {
-                    LookItem::Theme => {
-                        self.config.theme =
-                            if offset > 0 { self.config.theme.next() } else { self.config.theme.previous() }
-                    }
-                    LookItem::Icons => self.config.icons = !self.config.icons,
-                }
+            Screen::Segments(host) => self.toggle_segment(host),
+            Screen::Theme => {
+                self.config.theme = if offset > 0 { self.config.theme.next() } else { self.config.theme.previous() };
                 self.save();
             }
             _ => {}
         }
     }
 
-    /// Segment rows: the shown ones in their order, then the hidden ones.
     /// Every segment in this visit's fixed order, with whether it is shown.
     fn segment_rows(&self, host: Option<Host>) -> Vec<(Segment, bool)> {
         let shown = self.shown_segments(host);
@@ -271,6 +258,18 @@ impl App {
     fn toggle_segment(&mut self, host: Option<Host>) {
         let (segment, shown) = self.segment_rows(host)[self.cursor];
         self.write_shown(host, |candidate, is_shown| if candidate == segment { !shown } else { is_shown });
+    }
+
+    /// Icons are shared by every agent, like the theme.
+    fn toggle_icon(&mut self) {
+        let segment = self.segment_order[self.cursor];
+        if !segment.has_icon() {
+            return;
+        }
+        if !self.config.icons.remove(&segment) {
+            self.config.icons.insert(segment);
+        }
+        self.save();
     }
 
     /// Moves the picked-up segment one row; a shown one moves in the status line too.

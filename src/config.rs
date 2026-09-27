@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
 use anyhow::{Context, Result};
@@ -14,7 +14,9 @@ use crate::theme::Theme;
 pub struct Config {
     pub segments: Vec<Segment>,
     pub theme: Theme,
-    pub icons: bool,
+    /// Segments drawn with their Nerd Font icon. `true`/`false` stand for all or none.
+    #[serde(deserialize_with = "icons_from_list_or_bool")]
+    pub icons: BTreeSet<Segment>,
     pub separator: String,
     /// Hosts that show a different segment list than `segments`.
     pub hosts: BTreeMap<Host, HostOverride>,
@@ -31,11 +33,25 @@ impl Default for Config {
         Self {
             segments: vec![Segment::Worktree, Segment::Git, Segment::Issue, Segment::Model, Segment::Context],
             theme: Theme::default(),
-            icons: true,
+            icons: Segment::ALL.into_iter().filter(|segment| segment.has_icon()).collect(),
             separator: "  ".to_string(),
             hosts: BTreeMap::new(),
         }
     }
+}
+
+fn icons_from_list_or_bool<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<BTreeSet<Segment>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Icons {
+        All(bool),
+        Some(BTreeSet<Segment>),
+    }
+    Ok(match Icons::deserialize(deserializer)? {
+        Icons::All(true) => Segment::ALL.into_iter().filter(|segment| segment.has_icon()).collect(),
+        Icons::All(false) => BTreeSet::new(),
+        Icons::Some(segments) => segments,
+    })
 }
 
 impl Config {
@@ -71,6 +87,14 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn icons_accept_a_list_or_all_or_none() {
+        let icons = |toml: &str| toml::from_str::<Config>(toml).unwrap().icons.into_iter().collect::<Vec<_>>();
+        assert_eq!(icons("icons = [\"git\", \"model\"]"), [Segment::Git, Segment::Model]);
+        assert_eq!(icons("icons = false"), []);
+        assert!(icons("icons = true").contains(&Segment::Worktree) && !icons("icons = true").contains(&Segment::Cost));
+    }
 
     #[test]
     fn host_overrides_replace_the_shared_segments() {

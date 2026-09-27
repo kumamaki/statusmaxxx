@@ -14,12 +14,12 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/kumamaki/statusmaxxx/re
 cargo install --git https://github.com/kumamaki/statusmaxxx
 ```
 
-Icons need a [Nerd Font](https://www.nerdfonts.com). Turn them off under Look in the TUI, or set `icons = false` in the config.
+Icons need a [Nerd Font](https://www.nerdfonts.com). Turn each one on or off with `i` on the Segments screen, or list them in `icons` in the config.
 
 ## Use
 
 ```sh
-statusmaxxx                   # TUI: segments, agents, look; changes save as you make them
+statusmaxxx                   # TUI: segments, agents, theme; changes save as you make them
 statusmaxxx install claude amp
 statusmaxxx status
 statusmaxxx uninstall amp
@@ -53,7 +53,7 @@ Command agents run a small wrapper script in `~/.config/statusmaxxx/hosts/`. It 
 ```toml
 segments = ["worktree", "git", "issue", "model", "context"]
 theme = "terminal"          # terminal, short-giraffe, catppuccin, dracula, nord, gruvbox, light
-icons = true
+icons = ["worktree", "git", "issue", "model", "context"]   # or true / false for all / none
 separator = "  "
 
 [hosts.amp]                 # Amp shows its own model, so it gets its own list

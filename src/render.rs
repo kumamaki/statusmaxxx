@@ -20,7 +20,7 @@ pub fn render(host: Host, config: &Config, session: &Session) -> String {
 
 /// The non-empty segments `host` shows, in order.
 pub fn segments(host: Host, config: &Config, session: &Session) -> Vec<Vec<Piece>> {
-    let sources = Sources::new(session, config.icons);
+    let sources = Sources::new(session, &config.icons);
     config
         .segments_for(host)
         .iter()
