@@ -25,7 +25,7 @@ statusmaxxx status
 statusmaxxx uninstall amp
 ```
 
-`install` saves whatever status line it replaces, and `uninstall` puts it back. Every settings file it edits also gets a `<file>.statusmaxxx.bak` copy. `install` also adds a short marked instruction to the agent's global instructions file, telling it to set its issue (see [Issues](#issues)); `uninstall` removes it.
+`install` saves whatever status line it replaces, and `uninstall` puts it back. Every settings file it edits also gets a `<file>.statusmaxxx.bak` copy. `install` also tells the agent to keep its issue current (see [Issues](#issues)), and `uninstall` removes that too.
 
 ## Agents
 
@@ -76,16 +76,16 @@ statusmaxxx issue show
 
 Issues are kept per worktree, in that worktree's own git dir. They survive restarts, every linked worktree has its own list, and nothing shows up in `git status`. Any tracker works: the id is just text.
 
-`install` teaches the agent to do this by adding a marked block to its global instructions:
+`install` teaches the agent to do this, at the points where it matters:
 
-| Agent | File |
+| Agent | How it hears about it |
 |---|---|
-| Claude Code | `~/.claude/CLAUDE.md` |
-| Qwen Code | `~/.qwen/QWEN.md` |
-| Droid, Amp, pi, OpenCode | their global `AGENTS.md` |
-| Copilot CLI | `~/.copilot/instructions/statusmaxxx.instructions.md` |
+| Claude Code, Qwen, Droid | `SessionStart` hook in their `settings.json` |
+| Cursor CLI | `sessionStart` hook in `~/.cursor/hooks.json` |
+| Copilot CLI | `sessionStart` hook in `~/.copilot/hooks/statusmaxxx.json` |
+| Amp, pi, OpenCode | marked block in their global `AGENTS.md` |
 
-Cursor has no global instructions file, so add the same line to its user rules yourself.
+The hook runs at startup, on resume, and after compaction. It tells the agent what this worktree shows (`ENG-42 "Fix auth" (In Progress)`), or that nothing is set, and how to update it. Try it with `echo '{"cwd":"'$PWD'"}' | statusmaxxx hook session-start --host claude`.
 
 ## Debugging
 

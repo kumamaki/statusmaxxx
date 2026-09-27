@@ -37,10 +37,6 @@ pub fn config_file() -> Result<PathBuf> {
     Ok(config_dir()?.join("config.toml"))
 }
 
-pub fn wrapper_script(host: Host) -> Result<PathBuf> {
-    Ok(config_dir()?.join("hosts").join(host.id()))
-}
-
 pub fn replaced_record(host: Host) -> Result<PathBuf> {
     Ok(config_dir()?.join("replaced").join(format!("{}.json", host.id())))
 }

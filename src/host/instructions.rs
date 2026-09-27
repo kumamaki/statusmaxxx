@@ -1,6 +1,5 @@
-//! Tells the agent to set the issue it works on, through its global
-//! instructions. Shared files get a marked block; agents that load a folder of
-//! instruction files get a file of their own.
+//! Tells plugin agents to set the issue they work on, through a marked block in
+//! their global instructions.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -8,54 +7,32 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 use super::Host;
+use crate::issue::HOW_TO;
 use crate::paths;
 
 const BEGIN: &str = "<!-- statusmaxxx:begin -->";
 const END: &str = "<!-- statusmaxxx:end -->";
-const INSTRUCTION: &str = "## Status line issue
 
-When you start work on a tracked issue (Linear, GitHub, beads, or any other tracker), run `statusmaxxx issue set <id> \"<title>\" --state \"<state>\"` so the status line shows it. When the state changes, run `statusmaxxx issue set <id> --state \"<state>\"`. Once the work lands, run `statusmaxxx issue clear`.
-";
-
-enum Target {
-    Block(PathBuf),
-    OwnFile(PathBuf),
-}
-
-/// `None` where the agent has no global instructions file, or cannot show the issue.
-fn target(host: Host) -> Result<Option<Target>> {
-    let home = host.home()?;
+/// Plugin agents only: command agents hear it from their session-start hook, and
+/// built-in agents cannot show the issue.
+fn file(host: Host) -> Result<Option<PathBuf>> {
     Ok(match host {
-        Host::Claude => Some(Target::Block(home.join("CLAUDE.md"))),
-        Host::Qwen => Some(Target::Block(home.join("QWEN.md"))),
-        Host::Droid | Host::Amp | Host::Pi | Host::Opencode => Some(Target::Block(home.join("AGENTS.md"))),
-        Host::Copilot => Some(Target::OwnFile(home.join("instructions").join("statusmaxxx.instructions.md"))),
-        Host::Cursor | Host::Codex | Host::Gemini => None,
+        Host::Amp | Host::Pi | Host::Opencode => Some(host.home()?.join("AGENTS.md")),
+        Host::Claude | Host::Cursor | Host::Qwen | Host::Droid | Host::Copilot | Host::Codex | Host::Gemini => None,
     })
 }
 
 pub fn install(host: Host) -> Result<Vec<String>> {
-    let (path, contents) = match target(host)? {
-        None => return Ok(vec![]),
-        Some(Target::OwnFile(path)) => (path, format!("<!-- Managed by statusmaxxx -->\n{INSTRUCTION}")),
-        Some(Target::Block(path)) => {
-            let contents = with_block(&read(&path)?)?;
-            (path, contents)
-        }
+    let Some(path) = file(host)? else {
+        return Ok(vec![]);
     };
-    paths::write_file(&path, &contents)?;
+    paths::write_file(&path, &with_block(&read(&path)?)?)?;
     Ok(vec![format!("Wrote the issue instruction to <{}>", paths::display(&path))])
 }
 
 pub fn uninstall(host: Host) -> Result<Vec<String>> {
-    let path = match target(host)? {
-        None => return Ok(vec![]),
-        Some(Target::OwnFile(path)) if path.exists() => {
-            fs::remove_file(&path).with_context(|| format!("Cannot remove <{}>", path.display()))?;
-            return Ok(vec![format!("Removed <{}>", paths::display(&path))]);
-        }
-        Some(Target::OwnFile(_)) => return Ok(vec![]),
-        Some(Target::Block(path)) => path,
+    let Some(path) = file(host)? else {
+        return Ok(vec![]);
     };
     let Some(remaining) = without_block(&read(&path)?)? else {
         return Ok(vec![]);
@@ -77,7 +54,7 @@ fn read(path: &Path) -> Result<String> {
 }
 
 fn block() -> String {
-    format!("{BEGIN}\n{INSTRUCTION}{END}\n")
+    format!("{BEGIN}\n## Status line issue\n\n{HOW_TO}\n{END}\n")
 }
 
 /// Replaces our block, or appends it after a blank line.

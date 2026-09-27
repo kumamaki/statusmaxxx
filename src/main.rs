@@ -49,10 +49,24 @@ enum Command {
     },
     /// Show which agents are detected and wired up.
     Status,
+    /// Agent hooks; `install` registers them.
+    Hook {
+        #[command(subcommand)]
+        event: HookEvent,
+    },
     /// Issues shown for the current worktree. Agents run these as they pick up and land work.
     Issue {
         #[command(subcommand)]
         command: IssueCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum HookEvent {
+    /// Tell the agent which issue this worktree shows, or how to set one.
+    SessionStart {
+        #[arg(long)]
+        host: Host,
     },
 }
 
@@ -92,16 +106,13 @@ fn main() -> Result<()> {
         Command::Install { hosts } => each_host(&hosts, |host, config| host.install(config)),
         Command::Uninstall { hosts } => each_host(&hosts, |host, _| host.uninstall()),
         Command::Status => status(),
+        Command::Hook { event: HookEvent::SessionStart { host } } => session_start(host),
         Command::Issue { command } => issue(command),
     }
 }
 
 fn render(host: Host) -> Result<()> {
-    let mut input = String::new();
-    // Run by hand from a terminal there is no session JSON to wait for.
-    if !io::stdin().is_terminal() {
-        io::stdin().read_to_string(&mut input).context("Cannot read session JSON from stdin")?;
-    }
+    let input = read_stdin()?;
     let session = Payload::parse(&input)?.into_session()?;
     if !input.trim().is_empty() {
         // The TUI previews each agent with the last session it really sent.
@@ -111,6 +122,26 @@ fn render(host: Host) -> Result<()> {
     let mut stdout = io::stdout().lock();
     writeln!(stdout, "{line}")?;
     stdout.flush().context("Cannot write the status line")
+}
+
+/// Session JSON from the agent; run by hand from a terminal there is none to wait for.
+fn read_stdin() -> Result<String> {
+    let mut input = String::new();
+    if !io::stdin().is_terminal() {
+        io::stdin().read_to_string(&mut input).context("Cannot read session JSON from stdin")?;
+    }
+    Ok(input)
+}
+
+/// Outside a repository there is no worktree issue to talk about, so it prints nothing.
+fn session_start(host: Host) -> Result<()> {
+    let session = Payload::parse(&read_stdin()?)?.into_session()?;
+    let Some(repo) = Repo::discover(&session.cwd)? else {
+        return Ok(());
+    };
+    let briefing = Issues::of(&repo)?.briefing();
+    println!("{}", host::hook::output(host, &briefing));
+    Ok(())
 }
 
 fn each_host(hosts: &[Host], action: impl Fn(Host, &Config) -> Result<Vec<String>>) -> Result<()> {

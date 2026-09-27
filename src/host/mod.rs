@@ -5,10 +5,12 @@
 
 mod builtin;
 mod command;
+pub mod hook;
 mod instructions;
 mod plugin;
 mod replaced;
 pub mod settings;
+mod wrapper;
 
 pub use builtin::item as builtin_item;
 
@@ -185,6 +187,7 @@ impl Host {
             Tier::Plugin => plugin::install(self)?,
             Tier::BuiltIn => builtin::install(self, config)?,
         };
+        report.extend(hook::install(self)?);
         report.extend(instructions::install(self)?);
         Ok(report)
     }
@@ -195,6 +198,7 @@ impl Host {
             Tier::Plugin => plugin::uninstall(self)?,
             Tier::BuiltIn => builtin::uninstall(self)?,
         };
+        report.extend(hook::uninstall(self)?);
         report.extend(instructions::uninstall(self)?);
         Ok(report)
     }

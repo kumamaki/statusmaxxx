@@ -21,6 +21,23 @@ pub struct Issue {
     pub url: Option<String>,
 }
 
+/// How an agent keeps the status line's issue current. Agents read it at session start.
+pub const HOW_TO: &str = "When you start work on a tracked issue (Linear, GitHub, beads, or any other tracker), run `statusmaxxx issue set <id> \"<title>\" --state \"<state>\"` so the status line shows it. When the state changes, run `statusmaxxx issue set <id> --state \"<state>\"`. Once the work lands, run `statusmaxxx issue clear`.";
+
+impl Issue {
+    /// `ENG-42 "Fix auth" (In Progress)`
+    fn summary(&self) -> String {
+        let mut summary = self.id.clone();
+        if let Some(title) = &self.title {
+            summary.push_str(&format!(" \"{title}\""));
+        }
+        if let Some(state) = &self.state {
+            summary.push_str(&format!(" ({state})"));
+        }
+        summary
+    }
+}
+
 /// The issue list of one worktree.
 pub struct Issues {
     file: PathBuf,
@@ -80,6 +97,15 @@ impl Issues {
 
     pub fn clear(&mut self) {
         self.list.clear();
+    }
+
+    /// What the agent is told at session start about this worktree.
+    pub fn briefing(&self) -> String {
+        if self.list.is_empty() {
+            return format!("statusmaxxx: no issue is set for this worktree. {HOW_TO}");
+        }
+        let shown: Vec<String> = self.list.iter().map(Issue::summary).collect();
+        format!("statusmaxxx: this worktree's status line shows {}. {HOW_TO}", shown.join(", "))
     }
 
     pub fn save(&self) -> Result<()> {

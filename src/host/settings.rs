@@ -56,6 +56,15 @@ impl JsonSettings {
         remove_nested(&mut self.root, keys)
     }
 
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.root.keys().map(String::as_str)
+    }
+
+    /// Deletes the file, for when nothing we or the user wrote is left in it.
+    pub fn delete(self) -> Result<()> {
+        fs::remove_file(&self.path).with_context(|| format!("Cannot remove <{}>", self.path.display()))
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }

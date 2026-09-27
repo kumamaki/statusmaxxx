@@ -1,12 +1,11 @@
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde_json::{Value, json};
 
 use super::settings::JsonSettings;
-use super::{Host, InstallState, replaced, shell_quote};
+use super::wrapper::Wrapper;
+use super::{Host, InstallState, replaced};
 use crate::paths;
 
 /// Where a command host keeps its status line setting.
@@ -56,7 +55,7 @@ fn target(host: Host, command: &str) -> Result<Target> {
 }
 
 pub fn state(host: Host) -> Result<InstallState> {
-    let wrapper = wrapper_command(host)?;
+    let wrapper = Wrapper::StatusLine.command(host)?;
     let target = target(host, &wrapper)?;
     let settings = JsonSettings::open(target.file)?;
     Ok(match settings.get(target.key) {
@@ -67,12 +66,10 @@ pub fn state(host: Host) -> Result<InstallState> {
 }
 
 pub fn install(host: Host) -> Result<Vec<String>> {
-    let wrapper = paths::wrapper_script(host)?;
-    write_wrapper(host, &wrapper)?;
-    let command = wrapper.to_string_lossy().into_owned();
+    let mut report = vec![Wrapper::StatusLine.write(host)?];
+    let command = Wrapper::StatusLine.command(host)?;
     let target = target(host, &command)?;
     let mut settings = JsonSettings::open(target.file)?;
-    let mut report = vec![format!("Wrote <{}>", paths::display(&wrapper))];
     let previous = settings.get(target.key).filter(|entry| !entry.is_null() && entry["command"] != command.as_str());
     if let Some(previous) = previous {
         report.push(format!("Replaced status line <{}>; uninstall restores it", describe(previous)));
@@ -88,13 +85,12 @@ pub fn install(host: Host) -> Result<Vec<String>> {
 }
 
 pub fn uninstall(host: Host) -> Result<Vec<String>> {
-    let wrapper = paths::wrapper_script(host)?;
     let mut report = Vec::new();
     let installed = state(host)? == InstallState::Installed;
     // Taken even when not installed: a line the user set since then is theirs to keep.
     let previous = replaced::take(host)?;
     if installed {
-        let target = target(host, &wrapper.to_string_lossy())?;
+        let target = target(host, &Wrapper::StatusLine.command(host)?)?;
         let mut settings = JsonSettings::open(target.file)?;
         settings.remove(target.key);
         for (key, _) in target.extras {
@@ -107,30 +103,10 @@ pub fn uninstall(host: Host) -> Result<Vec<String>> {
         settings.save()?;
         report.push(format!("Updated <{}>", paths::display(settings.path())));
     }
-    if wrapper.exists() {
-        fs::remove_file(&wrapper).with_context(|| format!("Cannot remove <{}>", wrapper.display()))?;
-        report.push(format!("Removed <{}>", paths::display(&wrapper)));
-    }
+    report.extend(Wrapper::StatusLine.remove(host)?);
     Ok(report)
 }
 
 fn describe(entry: &Value) -> String {
     entry["command"].as_str().map_or_else(|| entry.to_string(), str::to_string)
-}
-
-fn wrapper_command(host: Host) -> Result<String> {
-    Ok(paths::wrapper_script(host)?.to_string_lossy().into_owned())
-}
-
-/// Agents get a script path rather than `statusmaxxx render --host …`: some
-/// spawn the command without a shell, where arguments in the string break.
-fn write_wrapper(host: Host, wrapper: &std::path::Path) -> Result<()> {
-    let binary = paths::binary()?;
-    let script = format!(
-        "#!/bin/sh\n# Managed by statusmaxxx; `statusmaxxx uninstall {host}` removes it.\nexec {} render --host {host}\n",
-        shell_quote(&binary.to_string_lossy()),
-    );
-    paths::write_file(wrapper, &script)?;
-    fs::set_permissions(wrapper, fs::Permissions::from_mode(0o755))
-        .with_context(|| format!("Cannot make <{}> executable", wrapper.display()))
 }

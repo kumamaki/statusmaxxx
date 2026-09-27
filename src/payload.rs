@@ -4,13 +4,15 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-/// What an agent tells us about its session. Every host sends the Claude Code
-/// shape (the command hosts natively, the plugin shims by construction), and
-/// hosts omit what they do not track, so every field is optional.
+/// What an agent tells us about its session, from its status line or its hooks.
+/// Hosts send the Claude Code shape (the plugin shims by construction) and omit
+/// what they do not track, so every field is optional.
 #[derive(Debug, Default, Deserialize)]
 pub struct Payload {
     cwd: Option<PathBuf>,
     workspace: Option<Workspace>,
+    /// Cursor's hooks send the workspace folders instead of a cwd.
+    workspace_roots: Option<Vec<PathBuf>>,
     model: Option<Model>,
     context_window: Option<ContextWindow>,
     cost: Option<Cost>,
@@ -21,9 +23,21 @@ struct Workspace {
     current_dir: Option<PathBuf>,
 }
 
+/// Status lines send an object; Cursor's hooks send the bare model name.
 #[derive(Debug, Deserialize)]
-struct Model {
-    display_name: Option<String>,
+#[serde(untagged)]
+enum Model {
+    Named { display_name: Option<String> },
+    Name(String),
+}
+
+impl Model {
+    fn into_name(self) -> Option<String> {
+        match self {
+            Model::Named { display_name } => display_name,
+            Model::Name(name) => Some(name),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,7 +68,11 @@ impl Payload {
     }
 
     pub fn into_session(self) -> Result<Session> {
-        let cwd = match self.cwd.or(self.workspace.and_then(|workspace| workspace.current_dir)) {
+        let cwd = self
+            .cwd
+            .or(self.workspace.and_then(|workspace| workspace.current_dir))
+            .or(self.workspace_roots.and_then(|roots| roots.into_iter().next()));
+        let cwd = match cwd {
             Some(cwd) => cwd,
             // Agents spawn the command inside the session directory, so the
             // process cwd is the session cwd when the payload leaves it out.
@@ -62,7 +80,7 @@ impl Payload {
         };
         Ok(Session {
             cwd,
-            model: self.model.and_then(|model| model.display_name),
+            model: self.model.and_then(Model::into_name),
             context_used_percent: self.context_window.and_then(|window| window.used_percentage),
             cost_usd: self.cost.and_then(|cost| cost.total_cost_usd),
         })
@@ -74,16 +92,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_the_claude_code_shape() {
-        let payload = Payload::parse(
-            r#"{"workspace":{"current_dir":"/repo"},"model":{"display_name":"Opus"},
-                "context_window":{"used_percentage":42.5},"cost":{"total_cost_usd":1.5}}"#,
-        )
-        .unwrap();
-        let session = payload.into_session().unwrap();
-        assert_eq!(session.cwd, PathBuf::from("/repo"));
-        assert_eq!(session.model.as_deref(), Some("Opus"));
-        assert_eq!(session.context_used_percent, Some(42.5));
-        assert_eq!(session.cost_usd, Some(1.5));
+    fn reads_every_agent_shape() {
+        let cases = [
+            (
+                r#"{"workspace":{"current_dir":"/repo"},"model":{"display_name":"Opus"},
+                    "context_window":{"used_percentage":42.5},"cost":{"total_cost_usd":1.5}}"#,
+                ("/repo", Some("Opus"), Some(42.5), Some(1.5)),
+            ),
+            // Cursor's hooks: workspace folders and a bare model name.
+            (
+                r#"{"workspace_roots":["/repo"],"model":"grok-4","transcript_path":null}"#,
+                ("/repo", Some("grok-4"), None, None),
+            ),
+        ];
+        for (json, (cwd, model, context, cost)) in cases {
+            let session = Payload::parse(json).unwrap().into_session().unwrap();
+            assert_eq!(session.cwd, PathBuf::from(cwd), "cwd of <{json}>");
+            assert_eq!(session.model.as_deref(), model, "model of <{json}>");
+            assert_eq!(session.context_used_percent, context);
+            assert_eq!(session.cost_usd, cost);
+        }
     }
 }
