@@ -59,6 +59,18 @@ function mustNot(screen: string, label: string, ...needles: string[]): void {
   for (const needle of needles) if (screen.includes(needle)) failed.push(`${label}: still shows ${JSON.stringify(needle)}`);
 }
 
+/** The agent switcher: its label and the columns of both arrows. */
+function stepper(screen: string, label: string): { name: string; left: number; right: number } {
+  const line = screen.split("\n").find((row) => row.includes("◂") && row.includes("▸"));
+  if (!line) {
+    failed.push(`${label}: no agent switcher`);
+    return { name: "", left: -1, right: -1 };
+  }
+  const left = line.indexOf("◂");
+  const right = line.indexOf("▸");
+  return { name: line.slice(left + 1, right).trim(), left, right };
+}
+
 function cardChrome(screen: string, label: string): void {
   must(screen, label, "╭─────────────────╮", "│   statusmaxxx   ╰", "╯  esc  │", "├", "╰");
 }
@@ -103,16 +115,23 @@ async function main(): Promise<number> {
     const home = await snapshot("home");
     must(home, "home", "Segments", "Agents", "Look", "Quit", "Choose what the line shows");
     must(home, "home", "app:app-auth", "smx-1-auth", "SMX-1 Fix the auth flow", "(In Progress)", "Opus", "42%");
-    must(home, "home", "◂  Claude Code  ▸");
+    const homeStepper = stepper(home, "home");
+    if (homeStepper.name !== "Claude Code") failed.push(`home: switcher shows ${JSON.stringify(homeStepper.name)}`);
     mustNot(home, "home", "Claude Code · available", "other agents");
     must(home, "home", "0 installed · 4 available · 6 not found");
     cardChrome(home, "home");
 
     await press("enter");
     const segments = await snapshot("segments");
-    must(segments, "segments", "Every agent uses this list", "◂  Claude Code  ▸", "shown", "hidden", "not in Amp");
+    must(segments, "segments", "Every agent uses this list", "shown", "hidden", "not in Amp");
     await press("right");
-    must(await snapshot("segments-preview-cursor"), "segments-preview-cursor", "◂  Factory Droid  ▸", "Factory Droid doesn't report its context");
+    const droid = await snapshot("segments-preview-cursor");
+    must(droid, "segments-preview-cursor", "Factory Droid doesn't report its context");
+    const droidStepper = stepper(droid, "segments-preview-cursor");
+    if (droidStepper.name !== "Factory Droid") failed.push(`segments-preview-cursor: switcher shows ${JSON.stringify(droidStepper.name)}`);
+    if (droidStepper.left !== homeStepper.left || droidStepper.right !== homeStepper.right) {
+      failed.push(`switcher arrows moved: Claude Code ${homeStepper.left}/${homeStepper.right}, Factory Droid ${droidStepper.left}/${droidStepper.right}`);
+    }
     await press("left");
     cardChrome(segments, "segments");
 
@@ -131,7 +150,7 @@ async function main(): Promise<number> {
     await press("down", "down", "down", "down", "down");
     const amp = await snapshot("agents-amp");
     must(amp, "agents-amp", "Amp doesn't report its model and context");
-    mustNot(amp, "agents-amp", "◂  Amp  ▸", "Amp · available");
+    mustNot(amp, "agents-amp", "◂", "Amp · available");
     mustNot(amp.split("\n").slice(0, 6).join("\n"), "agents-amp", "Opus");
 
     await press("enter");
@@ -145,7 +164,7 @@ async function main(): Promise<number> {
 
     await press("esc", "esc", "down", "enter", "right");
     const look = await snapshot("look");
-    must(look, "look", "Theme", "◂ short-giraffe ▸", "Icons", "On", "Off");
+    must(look, "look", "Theme", "short-giraffe", "Icons", "On", "Off");
     cardChrome(look, "look");
 
     await tui(["resize", "80", "24"]);

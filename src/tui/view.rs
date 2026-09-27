@@ -2,6 +2,7 @@
 //! the focused item starts on, so the caller can keep it in view.
 
 use ratatui::text::{Line, Span};
+use unicode_width::UnicodeWidthStr;
 
 use super::card::{self, Card, chip, focus, muted, spread, text};
 use super::{AGENT_ITEMS, AgentItem, App, HOME, HomeItem, LOOK, LookItem, Screen, preview};
@@ -41,12 +42,16 @@ fn header(app: &App, inner: usize) -> Vec<Line<'static>> {
 }
 
 /// `◂  Claude Code  ▸` where ←/→ switch the previewed agent, the bare name elsewhere.
+/// The name sits in a slot as wide as the longest label, so the arrows never move.
 fn agent_control(host: Host, cycles: bool) -> Line<'static> {
-    if cycles {
-        Line::from(vec![muted("◂  "), text(host.label()), muted("  ▸")])
-    } else {
-        Line::from(text(host.label()))
+    if !cycles {
+        return Line::from(text(host.label()));
     }
+    let widest = Host::ALL.iter().map(|host| host.label().width()).max().unwrap_or(0);
+    let mut spans = vec![muted("◂  ")];
+    spans.extend(card::slot(text(host.label()), widest));
+    spans.push(muted("  ▸"));
+    Line::from(spans)
 }
 
 /// Screens where ←/→ belong to the preview rather than to a choice row.
@@ -214,7 +219,11 @@ fn look(app: &App, inner: usize) -> Screenful {
 fn theme_picker(current: Theme, focused: bool) -> Vec<Span<'static>> {
     let position = Theme::ALL.iter().position(|theme| *theme == current).unwrap_or(0) + 1;
     let arrows = |arrow: &str| if focused { text(arrow) } else { muted(arrow) };
-    vec![muted(format!("{position}/{}  ", Theme::ALL.len())), arrows("◂ "), focus(current.name()), arrows(" ▸")]
+    let widest = Theme::ALL.iter().map(|theme| theme.name().width()).max().unwrap_or(0);
+    let mut spans = vec![muted(format!("{position}/{}  ", Theme::ALL.len())), arrows("◂ ")];
+    spans.extend(card::slot(focus(current.name()), widest));
+    spans.push(arrows(" ▸"));
+    spans
 }
 
 /// Focused names are red; inactive ones (hidden segment, missing agent) are muted.

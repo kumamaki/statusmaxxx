@@ -139,6 +139,12 @@ pub fn spread(left: Vec<Span<'static>>, right: Vec<Span<'static>>, width: usize)
     Line::from(spans)
 }
 
+/// `content` centered in a slot of `width` cells, for controls whose edges must not move.
+pub fn slot(content: Span<'static>, width: usize) -> Vec<Span<'static>> {
+    let spare = width.saturating_sub(content.width());
+    vec![Span::raw(" ".repeat(spare / 2)), content, Span::raw(" ".repeat(spare - spare / 2))]
+}
+
 /// Pads `line` on the left so it sits in the middle of `width`.
 pub fn center(line: Line<'static>, width: usize) -> Line<'static> {
     let lead = width.saturating_sub(line.width()) / 2;
