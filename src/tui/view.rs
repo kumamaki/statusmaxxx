@@ -26,29 +26,32 @@ pub fn card(app: &App, width: usize) -> (Card, usize) {
     (Card { width, header: header(app, inner), body, hint }, focus_line)
 }
 
-/// The previewed line, then whose line it is.
+/// Centered: the previewed line, whose line it is, and what that agent leaves out.
 fn header(app: &App, inner: usize) -> Vec<Line<'static>> {
     let host = previewed(app);
-    let row = app.agent(host);
-    let context = match app.screen {
-        Screen::Home => "←/→ other agents".to_string(),
-        Screen::Segments(None) => "shared by all agents".to_string(),
-        Screen::Segments(Some(_)) => "this agent only".to_string(),
-        Screen::Agents | Screen::Agent(_) | Screen::Look => String::new(),
-    };
     let mut header = vec![
-        card::fit(preview::line(host, &app.config, &app.sample), inner),
-        spread(
-            vec![muted(format!("{} · {}", host.label(), state_name(row.detected, &row.state)))],
-            vec![muted(context)],
-            inner,
-        ),
+        card::center(card::fit(preview::line(host, &app.config, &app.sample), inner), inner),
+        card::center(agent_control(host, cycles_preview(app.screen)), inner),
     ];
     let missing = preview::missing(host, &app.config);
     if !missing.is_empty() {
-        header.push(Line::from(muted(why_missing(host, &missing))));
+        header.push(card::center(Line::from(muted(why_missing(host, &missing))), inner));
     }
     header
+}
+
+/// `←  Claude Code  →` where ←/→ switch the previewed agent, the bare name elsewhere.
+fn agent_control(host: Host, cycles: bool) -> Line<'static> {
+    if cycles {
+        Line::from(vec![muted("←  "), text(host.label()), muted("  →")])
+    } else {
+        Line::from(text(host.label()))
+    }
+}
+
+/// Screens where ←/→ belong to the preview rather than to a choice row.
+pub fn cycles_preview(screen: Screen) -> bool {
+    matches!(screen, Screen::Home | Screen::Segments(None))
 }
 
 fn previewed(app: &App) -> Host {
@@ -92,7 +95,11 @@ fn home(app: &App) -> Screenful {
 }
 
 fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
-    let mut body = Vec::new();
+    let scope = match host {
+        Some(host) => format!("Only {} uses this list", host.label()),
+        None => "Every agent uses this list, unless it has its own".to_string(),
+    };
+    let mut body = vec![Line::from(muted(scope)), Line::default()];
     let mut focus_line = 0;
     let rows = app.segment_rows(host);
     for (index, (segment, shown)) in rows.iter().enumerate() {
@@ -241,17 +248,16 @@ fn segment_names(segments: &[Segment]) -> String {
     segments.iter().map(|segment| segment.name()).collect::<Vec<_>>().join(" · ")
 }
 
-/// `Amp doesn't report its model and context, so they stay off here`
+/// `Amp doesn't report its model and context`
 fn why_missing(host: Host, missing: &[Segment]) -> String {
     let names: Vec<&str> = missing.iter().map(|segment| segment.name()).collect();
-    let names = match names.as_slice() {
-        [.., last] if names.len() > 1 => format!("{} and {last}", names[..names.len() - 1].join(", ")),
+    let names = match names.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
         _ => names.join(""),
     };
-    let rest = if missing.len() == 1 { "so it stays off here" } else { "so they stay off here" };
     match host.tier() {
-        Tier::BuiltIn => format!("{} only shows its own items, {rest}: {names}", host.label()),
-        Tier::Command | Tier::Plugin => format!("{} doesn't report its {names}, {rest}", host.label()),
+        Tier::BuiltIn => format!("{} has no item for {names}", host.label()),
+        Tier::Command | Tier::Plugin => format!("{} doesn't report its {names}", host.label()),
     }
 }
 

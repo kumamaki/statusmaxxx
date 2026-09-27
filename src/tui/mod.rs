@@ -202,12 +202,18 @@ impl App {
         }
     }
 
-    /// ←/→: the previewed agent on Home, or the choice on a chip row.
+    /// ←/→: the previewed agent where the header offers it, or the choice on a chip row.
     fn step(&mut self, offset: isize) {
         match self.screen {
-            Screen::Home => {
-                let index = self.agent_index(self.preview_host) as isize + offset;
-                self.preview_host = self.agents[index.rem_euclid(self.agents.len() as isize) as usize].host;
+            screen if view::cycles_preview(screen) => {
+                // Agents on this machine; all of them when none are.
+                let mut choices: Vec<Host> =
+                    self.agents.iter().filter(|row| row.detected).map(|row| row.host).collect();
+                if choices.is_empty() {
+                    choices = Host::ALL.to_vec();
+                }
+                let index = choices.iter().position(|host| *host == self.preview_host).unwrap_or(0) as isize + offset;
+                self.preview_host = choices[index.rem_euclid(choices.len() as isize) as usize];
             }
             Screen::Agent(host) if AGENT_ITEMS[self.cursor] == AgentItem::Segments => {
                 if self.config.hosts.remove(&host).is_none() {

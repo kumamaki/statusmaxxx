@@ -101,12 +101,17 @@ async function main(): Promise<number> {
     const home = await snapshot("home");
     must(home, "home", "Segments", "Agents", "Look", "Quit", "Choose what the line shows");
     must(home, "home", "app:app-auth", "smx-1-auth", "SMX-1 Fix the auth flow", "(In Progress)", "Opus", "42%");
+    must(home, "home", "←  Claude Code  →");
+    mustNot(home, "home", "Claude Code · available", "other agents");
     must(home, "home", "0 installed · 4 available · 6 not found");
     cardChrome(home, "home");
 
     await press("enter");
     const segments = await snapshot("segments");
-    must(segments, "segments", "shared by all agents", "shown", "hidden", "not in Amp");
+    must(segments, "segments", "Every agent uses this list", "←  Claude Code  →", "shown", "hidden", "not in Amp");
+    await press("right");
+    must(await snapshot("segments-preview-cursor"), "segments-preview-cursor", "←  Factory Droid  →", "Factory Droid doesn't report its context");
+    await press("left");
     cardChrome(segments, "segments");
 
     await press("down", "space");
@@ -123,7 +128,8 @@ async function main(): Promise<number> {
 
     await press("down", "down", "down", "down", "down");
     const amp = await snapshot("agents-amp");
-    must(amp, "agents-amp", "Amp · available", "Amp doesn't report its model and context, so they stay off here");
+    must(amp, "agents-amp", "Amp doesn't report its model and context");
+    mustNot(amp, "agents-amp", "←  Amp  →", "Amp · available");
     mustNot(amp.split("\n").slice(0, 6).join("\n"), "agents-amp", "Opus");
 
     await press("enter");
@@ -132,7 +138,7 @@ async function main(): Promise<number> {
     await press("enter");
     await tui(["wait", "Reinstall", "--timeout", "5000"]);
     const installed = await snapshot("agent-amp-installed");
-    must(installed, "agent-amp-installed", "Amp · installed", "Wrote <~/.config/amp/plugins/statusmaxxx.ts>");
+    must(installed, "agent-amp-installed", "Reinstall", "Wrote <~/.config/amp/plugins/statusmaxxx.ts>");
     cardChrome(installed, "agent-amp-installed");
 
     await press("esc", "esc", "down", "enter", "right");

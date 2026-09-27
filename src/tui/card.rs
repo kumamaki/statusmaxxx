@@ -139,6 +139,14 @@ pub fn spread(left: Vec<Span<'static>>, right: Vec<Span<'static>>, width: usize)
     Line::from(spans)
 }
 
+/// Pads `line` on the left so it sits in the middle of `width`.
+pub fn center(line: Line<'static>, width: usize) -> Line<'static> {
+    let lead = width.saturating_sub(line.width()) / 2;
+    let mut spans = vec![Span::raw(" ".repeat(lead))];
+    spans.extend(line.spans);
+    Line::from(spans)
+}
+
 /// Clips a styled line to `width` cells, ending in `…` when anything was cut.
 pub fn fit(line: Line<'static>, width: usize) -> Line<'static> {
     if line.width() <= width {
