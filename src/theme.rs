@@ -52,8 +52,16 @@ impl Theme {
     }
 
     pub fn next(self) -> Theme {
+        self.offset(1)
+    }
+
+    pub fn previous(self) -> Theme {
+        self.offset(Self::ALL.len() - 1)
+    }
+
+    fn offset(self, steps: usize) -> Theme {
         let index = Self::ALL.iter().position(|theme| *theme == self).unwrap_or(0);
-        Self::ALL[(index + 1) % Self::ALL.len()]
+        Self::ALL[(index + steps) % Self::ALL.len()]
     }
 
     /// Wraps `text` in the ANSI escape for `role`.

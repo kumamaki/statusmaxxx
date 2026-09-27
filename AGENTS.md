@@ -19,7 +19,11 @@ src/
   theme.rs         Role → color per theme
   config.rs        ~/.config/statusmaxxx/config.toml
   paths.rs         XDG config/cache dirs, binary path, atomic writes
-  tui.rs           ratatui configuration UI with per-agent previews
+  tui/
+    mod.rs         screens, keys, state; every change saves immediately
+    card.rs        hug-tab card chrome and palette shared with the house TUIs (fam, Musik)
+    view.rs        one card per screen, with a live preview in the header
+    preview.rs     what an agent would show, from its last session
   host/
     mod.rs         Host enum: tier, output format, detection, notes
     command.rs     statusLine-command agents: Claude, Cursor, Qwen, Droid, Copilot
@@ -60,6 +64,7 @@ just release 0.2.0        # bump, commit, tag, push; dist builds the release
 - A failing segment renders `✗ <segment>` in the line and explains itself on stderr. It never blanks the whole line, and it never hides the error.
 - Editing another program's config: back it up (`<file>.statusmaxxx.bak`), refuse files we cannot rewrite faithfully (JSONC), remember what we replaced, and restore it on uninstall.
 - Command agents get a wrapper script path, not a command line, because some spawn it without a shell.
+- The TUI follows the house card style: hug tabs, four colors (text, muted, red focus, border), two-line items, screen per task, one right-aligned hint. No extra colors, pane layouts, or key legends.
 - Logs put dynamic values in `<angle brackets>`. Comments say why.
 
 ## Verifying against real agents
