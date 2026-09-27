@@ -29,12 +29,12 @@ pub fn line(host: Host, config: &Config, sample: &Session) -> Line<'static> {
     }
     let segments = render::segments(host, config, &as_sent_by(host, sample));
     match host.output() {
-        Output::Ansi { .. } => render::ansi(&segments, config, false)
+        Output::Ansi { .. } | Output::Json { colored: true } => render::ansi(&segments, config, false)
             .into_text()
             .map(|text: Text| text.lines.into_iter().next().unwrap_or_default())
             .unwrap_or_else(|error| Line::from(card::focus(format!("Preview failed: {error}")))),
-        // Plugin agents show plain text in their own colors.
-        Output::Json => Line::from(card::text(render::plain(&segments, &config.separator))),
+        // Agents that print escapes literally show plain text in their own colors.
+        Output::Json { colored: false } => Line::from(card::text(render::plain(&segments, &config.separator))),
     }
 }
 
