@@ -1,5 +1,3 @@
-use std::fs;
-
 use ansi_to_tui::IntoText;
 use anyhow::Result;
 use ratatui::text::{Line, Text};
@@ -7,19 +5,11 @@ use ratatui::text::{Line, Text};
 use super::card;
 use crate::config::Config;
 use crate::host::{self, Host, Output, Tier};
-use crate::payload::{Payload, Session};
-use crate::{paths, render};
+use crate::payload::Session;
+use crate::render;
+use crate::segment::Segment;
 
-/// What `host` would show right now, from the session it last sent or `sample`.
-pub fn line(host: Host, config: &Config, sample: &Session) -> Line<'static> {
-    match last_session(host) {
-        Ok(Some(session)) => render_line(host, config, &session),
-        Ok(None) => render_line(host, config, sample),
-        Err(error) => Line::from(card::focus(format!("Last session is unreadable: {error:#}"))),
-    }
-}
-
-/// Stands in for agents that have not rendered yet.
+/// The same session for every agent, so previews differ only by the agent.
 pub fn sample_session() -> Result<Session> {
     Ok(Session {
         cwd: std::env::current_dir()?,
@@ -29,14 +19,15 @@ pub fn sample_session() -> Result<Session> {
     })
 }
 
-/// Built-in agents draw their own items, so their preview names the item ids.
-fn render_line(host: Host, config: &Config, session: &Session) -> Line<'static> {
+/// What `host` would show for the sample session.
+pub fn line(host: Host, config: &Config, sample: &Session) -> Line<'static> {
     if host.tier() == Tier::BuiltIn {
+        // Built-in agents draw their own items, so the preview names the item ids.
         let items: Vec<&str> =
             config.segments_for(host).iter().filter_map(|segment| host::builtin_item(host, *segment)).collect();
         return Line::from(card::muted(items.join(" · ")));
     }
-    let segments = render::segments(host, config, session);
+    let segments = render::segments(host, config, &as_sent_by(host, sample));
     match host.output() {
         Output::Ansi { .. } => render::ansi(&segments, config, false)
             .into_text()
@@ -47,11 +38,17 @@ fn render_line(host: Host, config: &Config, session: &Session) -> Line<'static> 
     }
 }
 
-fn last_session(host: Host) -> Result<Option<Session>> {
-    let path = paths::last_payload(host)?;
-    match fs::read_to_string(&path) {
-        Ok(contents) => Ok(Some(Payload::parse(&contents)?.into_session()?)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.into()),
+/// Segments `host` is set to show but cannot.
+pub fn missing(host: Host, config: &Config) -> Vec<Segment> {
+    config.segments_for(host).iter().copied().filter(|segment| !host.supports(*segment)).collect()
+}
+
+/// The sample without the fields `host` never sends.
+fn as_sent_by(host: Host, sample: &Session) -> Session {
+    Session {
+        cwd: sample.cwd.clone(),
+        model: sample.model.clone().filter(|_| host.supports(Segment::Model)),
+        context_used_percent: sample.context_used_percent.filter(|_| host.supports(Segment::Context)),
+        cost_usd: sample.cost_usd.filter(|_| host.supports(Segment::Cost)),
     }
 }

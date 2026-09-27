@@ -120,7 +120,8 @@ impl App {
         let lines = card.lines(body_rows, scroll);
         let height = (lines.len() as u16).min(area.height);
         let x = area.x + (area.width - width) / 2;
-        frame.render_widget(Paragraph::new(lines), Rect { x, y: area.y, width, height });
+        let y = area.y + (area.height - height) / 2;
+        frame.render_widget(Paragraph::new(lines), Rect { x, y, width, height });
     }
 
     fn handle(&mut self, key: KeyEvent) {

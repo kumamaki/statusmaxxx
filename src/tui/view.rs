@@ -36,14 +36,19 @@ fn header(app: &App, inner: usize) -> Vec<Line<'static>> {
         Screen::Segments(Some(_)) => "this agent only".to_string(),
         Screen::Agents | Screen::Agent(_) | Screen::Look => String::new(),
     };
-    vec![
+    let mut header = vec![
         card::fit(preview::line(host, &app.config, &app.sample), inner),
         spread(
             vec![muted(format!("{} · {}", host.label(), state_name(row.detected, &row.state)))],
             vec![muted(context)],
             inner,
         ),
-    ]
+    ];
+    let missing = preview::missing(host, &app.config);
+    if !missing.is_empty() {
+        header.push(Line::from(muted(format!("Can't show here: {}", segment_names(&missing)))));
+    }
+    header
 }
 
 fn previewed(app: &App) -> Host {
@@ -100,10 +105,10 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
         }
         let state = if *shown { text("shown") } else { muted("hidden") };
         body.push(spread(vec![name_span(segment.name(), focused, *shown)], vec![state], inner));
-        let available = host.is_none_or(|host| host.supports(*segment));
-        body.push(Line::from(match (available, host) {
-            (false, Some(host)) => focus(format!("{} cannot show this", host.label())),
-            _ => muted(segment.description()),
+        body.push(Line::from(match host {
+            Some(host) if !host.supports(*segment) => focus(format!("{} cannot show this", host.label())),
+            Some(_) => muted(segment.description()),
+            None => muted(with_gaps(segment.description(), &agents_without(app, *segment))),
         }));
     }
     let hint = match rows[app.cursor] {
@@ -234,6 +239,23 @@ fn install_summary(host: Host) -> String {
 
 fn segment_names(segments: &[Segment]) -> String {
     segments.iter().map(|segment| segment.name()).collect::<Vec<_>>().join(" · ")
+}
+
+/// Detected agents that cannot show `segment`.
+fn agents_without(app: &App, segment: Segment) -> Vec<Host> {
+    app.agents.iter().filter(|row| row.detected && !row.host.supports(segment)).map(|row| row.host).collect()
+}
+
+/// `description · not in Amp, pi`, or a count once the list gets long.
+fn with_gaps(description: &str, missing: &[Host]) -> String {
+    match missing {
+        [] => description.to_string(),
+        [_, _, _, _, ..] => format!("{description} · not in {} of your agents", missing.len()),
+        _ => {
+            let names: Vec<&str> = missing.iter().map(|host| host.label()).collect();
+            format!("{description} · not in {}", names.join(", "))
+        }
+    }
 }
 
 fn agent_counts(app: &App) -> String {
