@@ -43,7 +43,7 @@ impl Default for Config {
             ],
             theme: Theme::default(),
             icons: Segment::ALL.into_iter().filter(|segment| segment.has_icon()).collect(),
-            separator: "  ".to_string(),
+            separator: " · ".to_string(),
             hosts: BTreeMap::new(),
         }
     }

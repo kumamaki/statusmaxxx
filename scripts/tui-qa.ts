@@ -123,7 +123,7 @@ async function main(): Promise<number> {
   try {
     await tui(["wait", "Segments", "--timeout", "8000"]);
     const home = await snapshot("home");
-    must(home, "home", "Segments", "Agents", "Style", "terminal theme · space separator", "Quit", "Choose what the line shows");
+    must(home, "home", "Segments", "Agents", "Style", "terminal theme · dot separator", "Quit", "Choose what the line shows");
     mustNot(home, "home", "Look");
     must(home, "home", "app:app-auth", "smx-1-auth", "SMX-1 Fix the auth flow", "(In Progress)", "Opus", "42%");
     const homeStepper = stepper(home, "home");
@@ -212,18 +212,18 @@ async function main(): Promise<number> {
 
     await press("esc", "esc", "down", "enter", "right");
     const style = await snapshot("style");
-    must(style, "style", "Theme", "short-giraffe", "Separator", "space");
+    must(style, "style", "Theme", "short-giraffe", "Separator", "dot");
     mustNot(style, "style", "Icons");
-    mustNot(previewLine(style), "style", "·");
+    must(previewLine(style), "style", "smx-1-auth · ✓ · ");
     cardChrome(style, "style");
 
     // The divider shows in the preview, and both pickers keep their arrows in one column.
     await press("down", "right");
-    const dot = await snapshot("style-separator-dot");
-    must(dot, "style-separator-dot", "dot");
-    must(previewLine(dot), "style-separator-dot", "smx-1-auth · ✓ · ");
-    const arrowColumns = dot.split("\n").filter((row) => /Theme|Separator/u.test(row)).map((row) => row.indexOf("◂"));
-    if (new Set(arrowColumns).size !== 1) failed.push(`style-separator-dot: arrows at columns ${arrowColumns}`);
+    const bar = await snapshot("style-separator-bar");
+    must(bar, "style-separator-bar", "bar");
+    must(previewLine(bar), "style-separator-bar", "smx-1-auth │ ✓ │ ");
+    const arrowColumns = bar.split("\n").filter((row) => /Theme|Separator/u.test(row)).map((row) => row.indexOf("◂"));
+    if (new Set(arrowColumns).size !== 1) failed.push(`style-separator-bar: arrows at columns ${arrowColumns}`);
 
     await tui(["resize", "80", "24"]);
     await press("esc", "enter");
