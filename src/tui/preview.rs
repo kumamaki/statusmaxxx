@@ -1,33 +1,62 @@
+use std::path::PathBuf;
+
 use ansi_to_tui::IntoText;
-use anyhow::Result;
 use ratatui::text::{Line, Text};
 
 use super::card;
 use crate::config::Config;
+use crate::git::{Head, Repo};
 use crate::host::{self, Host, Output, Tier};
+use crate::issue::Issue;
 use crate::payload::Session;
 use crate::render;
-use crate::segment::Segment;
+use crate::segment::{Segment, Sources};
 
-/// The same session for every agent, so previews differ only by the agent.
-pub fn sample_session() -> Result<Session> {
-    Ok(Session {
-        cwd: std::env::current_dir()?,
-        model: Some("Opus".into()),
-        context_used_percent: Some(42.0),
-        cost_usd: Some(1.23),
-    })
+/// One made-up session for every agent, so previews differ only by the agent,
+/// and every shown segment has something to show wherever the TUI runs.
+pub struct Sample {
+    session: Session,
+    repo: Repo,
+    issues: Vec<Issue>,
+}
+
+pub fn sample() -> Sample {
+    let root = PathBuf::from("/home/you/src/auth");
+    Sample {
+        session: Session {
+            cwd: root.join("web"),
+            model: Some("Opus".into()),
+            context_used_percent: Some(42.0),
+            cost_usd: Some(1.23),
+        },
+        repo: Repo {
+            git_dir: root.join(".git"),
+            root,
+            name: "shop".into(),
+            worktree: Some("auth".into()),
+            head: Head::Branch("eng-42".into()),
+            changed_files: 3,
+        },
+        issues: vec![Issue {
+            id: "ENG-42".into(),
+            title: Some("Fix login".into()),
+            state: Some("In Progress".into()),
+            url: None,
+        }],
+    }
 }
 
 /// What `host` would show for the sample session.
-pub fn line(host: Host, config: &Config, sample: &Session) -> Line<'static> {
+pub fn line(host: Host, config: &Config, sample: &Sample) -> Line<'static> {
     if host.tier() == Tier::BuiltIn {
         // Built-in agents draw their own items, so the preview names the item ids.
         let items: Vec<&str> =
             config.segments_for(host).iter().filter_map(|segment| host::builtin_item(host, *segment)).collect();
         return Line::from(card::muted(items.join(" · ")));
     }
-    let segments = render::segments(host, config, &as_sent_by(host, sample));
+    let session = as_sent_by(host, &sample.session);
+    let sources = Sources::with_repo(&session, &config.icons, sample.repo.clone(), sample.issues.clone());
+    let segments = render::segments(host, config, &sources);
     match host.output() {
         Output::Ansi { .. } | Output::Json { colored: true } => render::ansi(&segments, config, false)
             .into_text()

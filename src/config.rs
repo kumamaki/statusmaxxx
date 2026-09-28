@@ -34,6 +34,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             segments: vec![
+                Segment::Directory,
                 Segment::Worktree,
                 Segment::Branch,
                 Segment::Changes,

@@ -6,7 +6,7 @@ use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use crate::git::{Head, Repo};
-use crate::issue::Issues;
+use crate::issue::{Issue, Issues};
 use crate::paths;
 use crate::payload::Session;
 use crate::theme::Role;
@@ -122,17 +122,23 @@ impl Piece {
     }
 }
 
-/// Everything segments read. Git is loaded on first use so a line without git
-/// segments never pays for it.
+/// Everything segments read. Git and the issue file are loaded on first use so
+/// a line without those segments never pays for them.
 pub struct Sources<'a> {
     session: &'a Session,
     icons: &'a BTreeSet<Segment>,
     repo: OnceCell<Result<Option<Repo>, String>>,
+    issues: OnceCell<Result<Vec<Issue>, String>>,
 }
 
 impl<'a> Sources<'a> {
     pub fn new(session: &'a Session, icons: &'a BTreeSet<Segment>) -> Self {
-        Self { session, icons, repo: OnceCell::new() }
+        Self { session, icons, repo: OnceCell::new(), issues: OnceCell::new() }
+    }
+
+    /// Sources that never read the disk, for a preview that looks the same wherever it runs.
+    pub fn with_repo(session: &'a Session, icons: &'a BTreeSet<Segment>, repo: Repo, issues: Vec<Issue>) -> Self {
+        Self { session, icons, repo: OnceCell::from(Ok(Some(repo))), issues: OnceCell::from(Ok(issues)) }
     }
 
     fn repo(&self) -> Result<Option<&Repo>> {
@@ -140,6 +146,18 @@ impl<'a> Sources<'a> {
             .get_or_init(|| Repo::discover(&self.session.cwd).map_err(|error| format!("{error:#}")))
             .as_ref()
             .map(Option::as_ref)
+            .map_err(|error| anyhow!("{error}"))
+    }
+
+    /// The worktree's issues; none outside a repository.
+    fn issues(&self) -> Result<&[Issue]> {
+        let repo = self.repo()?;
+        self.issues
+            .get_or_init(|| match repo {
+                Some(repo) => Issues::of(repo).map(|issues| issues.list).map_err(|error| format!("{error:#}")),
+                None => Ok(Vec::new()),
+            })
+            .as_deref()
             .map_err(|error| anyhow!("{error}"))
     }
 
@@ -172,10 +190,7 @@ impl Segment {
                 Some(repo) => vec![changes(repo)],
                 None => vec![],
             },
-            Segment::Issue => match sources.repo()? {
-                Some(repo) => issues(&Issues::of(repo)?, sources),
-                None => vec![],
-            },
+            Segment::Issue => issues(sources.issues()?, sources),
             Segment::Model => {
                 session.model.iter().map(|model| Piece::new(Role::Model, sources.label(self, model))).collect()
             }
@@ -235,8 +250,8 @@ fn changes(repo: &Repo) -> Piece {
 }
 
 /// The first issue in full, the rest by id.
-fn issues(issues: &Issues, sources: &Sources) -> Vec<Piece> {
-    let Some((first, rest)) = issues.list.split_first() else {
+fn issues(issues: &[Issue], sources: &Sources) -> Vec<Piece> {
+    let Some((first, rest)) = issues.split_first() else {
         return vec![];
     };
     let text = match &first.title {

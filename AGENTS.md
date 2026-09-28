@@ -24,7 +24,7 @@ src/
     mod.rs         screens, keys, state; every change saves immediately
     card.rs        hug-tab card chrome and palette shared with the house TUIs (fam, Musik)
     view.rs        one card per screen, with a live preview in the header
-    preview.rs     what an agent would show, from its last session
+    preview.rs     what an agent would show for a made-up session and repo
   host/
     mod.rs         Host enum: tier, output format, detection, notes
     command.rs     statusLine-command agents: Claude, Cursor, Qwen, Droid, Copilot

@@ -51,7 +51,7 @@ Command agents run a small wrapper script in `~/.config/statusmaxxx/hosts/`. It 
 `~/.config/statusmaxxx/config.toml`, written by the TUI:
 
 ```toml
-segments = ["worktree", "branch", "changes", "issue", "model", "context"]
+segments = ["directory", "worktree", "branch", "changes", "issue", "model", "context"]
 theme = "terminal"          # terminal, short-giraffe, catppuccin, dracula, nord, gruvbox, light
 icons = ["worktree", "branch", "issue", "model", "context"]   # or true / false for all / none
 separator = " · "           # any text; the TUI offers "  ", " · ", " │ ", " | ", " › ", " / "

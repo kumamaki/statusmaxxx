@@ -14,7 +14,6 @@ use ratatui::{DefaultTerminal, Frame};
 
 use crate::config::Config;
 use crate::host::{Host, InstallState};
-use crate::payload::Session;
 use crate::segment::Segment;
 use crate::separator;
 
@@ -72,7 +71,7 @@ struct AgentRow {
 struct App {
     config: Config,
     agents: Vec<AgentRow>,
-    sample: Session,
+    sample: preview::Sample,
     screen: Screen,
     cursor: usize,
     /// The agent Home and Style preview; ←/→ on Home cycles it.
@@ -91,7 +90,7 @@ impl App {
         let mut app = Self {
             config,
             agents: Vec::new(),
-            sample: preview::sample_session()?,
+            sample: preview::sample(),
             screen: Screen::Home,
             cursor: 0,
             preview_host: Host::Claude,

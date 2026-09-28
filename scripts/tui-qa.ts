@@ -1,9 +1,8 @@
 #!/usr/bin/env bun
 /** tuistory product QA for `statusmaxxx config`.
 
-Runs the debug build against a sandbox HOME (four fake agents) and a fixture
-repository with a linked worktree and an issue, so every screen is
-deterministic. Snapshot and screenshot after every action into qa-results/.
+Runs the debug build against a sandbox HOME with four fake agents. The preview
+draws a made-up repository and issue, so every screen is deterministic. Snapshot and screenshot after every action into qa-results/.
 Asserts copy and chrome, not pixels.
 */
 
@@ -85,8 +84,8 @@ function cardChrome(screen: string, label: string): void {
   must(screen, label, "╭─────────────────╮", "│   statusmaxxx   ╰", "╯  esc  │", "├", "╰");
 }
 
-/** HOME with four detected agents, and a repo whose linked worktree has an issue set. */
-async function fixture(): Promise<{ home: string; worktree: string; env: Record<string, string> }> {
+/** HOME with four detected agents. */
+async function fixture(): Promise<{ home: string; env: Record<string, string> }> {
   const home = await mkdtemp(join(tmpdir(), "statusmaxxx-qa-"));
   for (const directory of [".claude", ".factory", ".pi/agent", ".config/amp"]) {
     await mkdir(join(home, directory), { recursive: true });
@@ -96,14 +95,7 @@ async function fixture(): Promise<{ home: string; worktree: string; env: Record<
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_CACHE_HOME: join(home, ".cache"),
   };
-  const repo = join(home, "src/app");
-  const worktree = join(home, "src/app-auth");
-  await mkdir(repo, { recursive: true });
-  await sh(["git", "init", "-q", "-b", "main"], { cwd: repo });
-  await sh(["git", "-c", "user.name=qa", "-c", "user.email=qa@example.com", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: repo });
-  await sh(["git", "worktree", "add", "-q", "-b", "smx-1-auth", worktree], { cwd: repo });
-  await sh([BINARY, "issue", "set", "SMX-1", "Fix the auth flow", "--state", "In Progress"], { cwd: worktree, env });
-  return { home, worktree, env };
+  return { home, env };
 }
 
 async function main(): Promise<number> {
@@ -115,17 +107,17 @@ async function main(): Promise<number> {
   await rm(ARTIFACTS, { recursive: true, force: true });
   await mkdir(ARTIFACTS, { recursive: true });
   await tui(["close"], true);
-  const { worktree, env } = await fixture();
+  const { home: sandbox, env } = await fixture();
 
   const envFlags = Object.entries(env).flatMap(([key, value]) => ["--env", `${key}=${value}`]);
-  await sh(["tuistory", "launch", `${BINARY} config`, "-s", SESSION, "--cwd", worktree, "--cols", String(COLS), "--rows", String(ROWS), "--background", "--timeout", "8000", ...envFlags]);
+  await sh(["tuistory", "launch", `${BINARY} config`, "-s", SESSION, "--cwd", sandbox, "--cols", String(COLS), "--rows", String(ROWS), "--background", "--timeout", "8000", ...envFlags]);
 
   try {
     await tui(["wait", "Segments", "--timeout", "8000"]);
     const home = await snapshot("home");
     must(home, "home", "Segments", "Agents", "Style", "terminal theme · dot separator", "Quit", "Choose what the line shows");
     mustNot(home, "home", "Look");
-    must(home, "home", "app:app-auth", "smx-1-auth", "SMX-1 Fix the auth flow", "(In Progress)", "Opus", "42%");
+    must(home, "home", "shop/web", "shop:auth", "eng-42", "±3", "ENG-42 Fix login", "(In Progress)", "Opus", "42%");
     const homeStepper = stepper(home, "home");
     if (homeStepper.name !== "Claude Code") failed.push(`home: switcher shows ${JSON.stringify(homeStepper.name)}`);
     mustNot(home, "home", "Claude Code · available", "other agents");
@@ -145,20 +137,20 @@ async function main(): Promise<number> {
     await press("enter");
     const segments = await snapshot("segments");
     must(segments, "segments", "Every agent uses this list", "shown", "hidden", "not in Amp", "◂ shown");
-    if (rowOrder(segments).join(" ") !== "worktree branch changes issue model context directory cost") {
+    if (rowOrder(segments).join(" ") !== "directory worktree branch changes issue model context cost") {
       failed.push(`segments: rows are ${rowOrder(segments)}`);
     }
     cardChrome(segments, "segments");
 
-    await press("down", "space");
+    await press("down", "down", "space");
     const hidden = await snapshot("segments-branch-hidden");
-    mustNot(previewLine(hidden), "segments-branch-hidden", "smx-1-auth");
+    mustNot(previewLine(hidden), "segments-branch-hidden", "eng-42");
     if (rowOrder(hidden).join() !== rowOrder(segments).join()) {
       failed.push(`segments-branch-hidden: rows moved from ${rowOrder(segments)} to ${rowOrder(hidden)}`);
     }
     await press("space");
     const restored = await snapshot("segments-branch-restored");
-    must(previewLine(restored), "segments-branch-restored", "smx-1-auth");
+    must(previewLine(restored), "segments-branch-restored", "eng-42");
     if (rowOrder(restored).join() !== rowOrder(segments).join()) {
       failed.push(`segments-branch-restored: rows moved to ${rowOrder(restored)}`);
     }
@@ -171,15 +163,15 @@ async function main(): Promise<number> {
     const order = rowOrder(moved);
     if (order.indexOf("changes") > order.indexOf("branch")) failed.push(`segments-branch-moved: order is ${order}`);
     const line = previewLine(moved);
-    if (line.indexOf("✓") > line.indexOf("smx-1-auth")) failed.push(`segments-branch-moved: preview is ${line.trim()}`);
+    if (line.indexOf("±3") > line.indexOf("eng-42")) failed.push(`segments-branch-moved: preview is ${line.trim()}`);
     mustNot(moved, "segments-branch-moved", "moving");
     await press("m", "up", "enter");
 
     // ←/→ flip shown and hidden on the focused row, like space.
     await press("right");
-    mustNot(previewLine(await snapshot("segments-branch-arrow-hidden")), "segments-branch-arrow-hidden", "smx-1-auth");
+    mustNot(previewLine(await snapshot("segments-branch-arrow-hidden")), "segments-branch-arrow-hidden", "eng-42");
     await press("left");
-    must(previewLine(await snapshot("segments-branch-arrow-shown")), "segments-branch-arrow-shown", "smx-1-auth");
+    must(previewLine(await snapshot("segments-branch-arrow-shown")), "segments-branch-arrow-shown", "eng-42");
 
     // i turns only branch's icon off.
     const gitIcon = "\ue725";
@@ -214,14 +206,14 @@ async function main(): Promise<number> {
     const style = await snapshot("style");
     must(style, "style", "Theme", "short-giraffe", "Separator", "dot");
     mustNot(style, "style", "Icons");
-    must(previewLine(style), "style", "smx-1-auth · ✓ · ");
+    must(previewLine(style), "style", "eng-42 · ±3 · ");
     cardChrome(style, "style");
 
     // The divider shows in the preview, and both pickers keep their arrows in one column.
     await press("down", "right");
     const bar = await snapshot("style-separator-bar");
     must(bar, "style-separator-bar", "bar");
-    must(previewLine(bar), "style-separator-bar", "smx-1-auth │ ✓ │ ");
+    must(previewLine(bar), "style-separator-bar", "eng-42 │ ±3 │ ");
     const arrowColumns = bar.split("\n").filter((row) => /Theme|Separator/u.test(row)).map((row) => row.indexOf("◂"));
     if (new Set(arrowColumns).size !== 1) failed.push(`style-separator-bar: arrows at columns ${arrowColumns}`);
 

@@ -7,7 +7,7 @@ use crate::segment::{Piece, Segment, Sources};
 use crate::theme::{Role, Theme};
 
 pub fn render(host: Host, config: &Config, session: &Session) -> String {
-    let segments = segments(host, config, session);
+    let segments = segments(host, config, &Sources::new(session, &config.icons));
     match host.output() {
         Output::Ansi { hyperlinks } => ansi(&segments, config, hyperlinks),
         Output::Json { colored } => {
@@ -19,12 +19,11 @@ pub fn render(host: Host, config: &Config, session: &Session) -> String {
 }
 
 /// The non-empty segments `host` shows, in order.
-pub fn segments(host: Host, config: &Config, session: &Session) -> Vec<Vec<Piece>> {
-    let sources = Sources::new(session, &config.icons);
+pub fn segments(host: Host, config: &Config, sources: &Sources) -> Vec<Vec<Piece>> {
     config
         .segments_for(host)
         .iter()
-        .map(|segment| render_segment(*segment, &sources))
+        .map(|segment| render_segment(*segment, sources))
         .filter(|pieces| !pieces.is_empty())
         .collect()
 }
