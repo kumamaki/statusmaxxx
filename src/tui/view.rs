@@ -306,13 +306,28 @@ fn name_span(name: &str, focused: bool, active: bool) -> Span<'static> {
     }
 }
 
-fn state_name(detected: bool, state: &InstallState) -> &'static str {
+fn state_name(detected: bool, state: &InstallState) -> String {
     match (detected, state) {
-        (false, _) => "Not found",
-        (true, InstallState::Installed) => "Installed",
-        (true, InstallState::NotInstalled) => "Available",
-        (true, InstallState::Occupied(_)) => "Another status line",
+        (false, _) => "Not found".to_string(),
+        (true, InstallState::Installed) => "Installed".to_string(),
+        (true, InstallState::NotInstalled) => "Available".to_string(),
+        (true, InstallState::Occupied(other)) => format!("Has its own status line ({})", short_command(other)),
     }
+}
+
+/// `statusline.sh` for `/Users/you/.factory/statusline.sh`: paths lose their folders, and
+/// a long command keeps its start, so the name fits beside the agent.
+fn short_command(command: &str) -> String {
+    const LIMIT: usize = 24;
+    let short = command
+        .split_whitespace()
+        .map(|word| word.rsplit('/').find(|part| !part.is_empty()).unwrap_or(word))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if short.chars().count() <= LIMIT {
+        return short;
+    }
+    format!("{}…", short.chars().take(LIMIT - 1).collect::<String>())
 }
 
 fn install_summary(host: Host) -> String {

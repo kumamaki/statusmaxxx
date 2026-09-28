@@ -91,7 +91,7 @@ function cardChrome(screen: string, label: string): void {
   must(screen, label, "╭─────────────────╮", "│   statusmaxxx   ╰", "╯  esc  │", "├", "╰");
 }
 
-/** HOME with four detected agents. */
+/** HOME with four detected agents; Droid already runs a status line script of its own. */
 async function fixture(): Promise<{ home: string; env: Record<string, string> }> {
   const home = await mkdtemp(join(tmpdir(), "statusmaxxx-qa-"));
   for (const directory of [".claude", ".factory", ".pi/agent", ".config/amp"]) {
@@ -102,6 +102,8 @@ async function fixture(): Promise<{ home: string; env: Record<string, string> }>
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_CACHE_HOME: join(home, ".cache"),
   };
+  const droidLine = { statusLine: { type: "command", command: join(home, ".factory/statusline.sh") } };
+  await Bun.write(join(home, ".factory/settings.json"), JSON.stringify(droidLine));
   return { home, env };
 }
 
@@ -194,7 +196,7 @@ async function main(): Promise<number> {
 
     await press("esc", "down", "enter");
     const agents = await snapshot("agents");
-    must(agents, "agents", "Claude Code", "Amp", "Codex CLI", "Available", "Not found");
+    must(agents, "agents", "Claude Code", "Amp", "Codex CLI", "Available", "Not found", "Has its own status line (statusline.sh)");
     cardChrome(agents, "agents");
 
     await press("down", "down", "down", "down", "down");
