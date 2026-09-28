@@ -5,9 +5,10 @@ use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr;
 
 use super::card::{self, Card, chip, focus, muted, spread, text};
-use super::{AGENT_ITEMS, AgentItem, App, HOME, HomeItem, Screen, preview};
+use super::{AGENT_ITEMS, AgentItem, App, HOME, HomeItem, STYLE_ITEMS, Screen, StyleItem, preview};
 use crate::host::{Host, InstallState, Tier};
 use crate::segment::Segment;
+use crate::separator;
 use crate::theme::Theme;
 
 pub fn card(app: &App, width: usize) -> (Card, usize) {
@@ -17,7 +18,7 @@ pub fn card(app: &App, width: usize) -> (Card, usize) {
         Screen::Segments(host) => segments(app, host, inner),
         Screen::Agents => agents(app, inner),
         Screen::Agent(host) => agent(app, host, inner),
-        Screen::Theme => theme(app, inner),
+        Screen::Style => style(app, inner),
     };
     let mut body = body;
     if !app.notice.is_empty() {
@@ -84,7 +85,7 @@ fn previewed(app: &App) -> Host {
     match app.screen {
         Screen::Agents => app.agents[app.cursor].host,
         Screen::Agent(host) | Screen::Segments(Some(host)) => host,
-        Screen::Home | Screen::Segments(None) | Screen::Theme => app.preview_host,
+        Screen::Home | Screen::Segments(None) | Screen::Style => app.preview_host,
     }
 }
 
@@ -103,7 +104,10 @@ fn home(app: &App) -> Screenful {
         let (name, description) = match item {
             HomeItem::Segments => ("Segments", segment_names(&app.config.segments)),
             HomeItem::Agents => ("Agents", agent_counts(app)),
-            HomeItem::Theme => ("Theme", app.config.theme.name().to_string()),
+            HomeItem::Style => {
+                let separator = separator::name(&app.config.separator);
+                ("Style", format!("{} theme · {separator} separator", app.config.theme.name()))
+            }
             HomeItem::Quit => ("Quit", String::new()),
         };
         body.push(Line::from(name_span(name, index == app.cursor, true)));
@@ -114,7 +118,7 @@ fn home(app: &App) -> Screenful {
     let hint = match HOME[app.cursor] {
         HomeItem::Segments => "Choose what the line shows, and in what order",
         HomeItem::Agents => "Install into Claude Code, Amp, and the others you use",
-        HomeItem::Theme => "Colors of the status line",
+        HomeItem::Style => "Colors of the status line, and what sits between segments",
         HomeItem::Quit => "Changes are saved as you make them",
     };
     (body, focus_line, hint.to_string())
@@ -224,18 +228,45 @@ fn agent(app: &App, host: Host, inner: usize) -> Screenful {
     (body, focus_line, hint)
 }
 
-fn theme(app: &App, inner: usize) -> Screenful {
-    let body = vec![spread(vec![name_span("Theme", true, true)], theme_picker(app.config.theme, true), inner)];
-    (body, 0, "←/→ picks a theme · esc back".to_string())
+fn style(app: &App, inner: usize) -> Screenful {
+    let themes: Vec<&str> = Theme::ALL.iter().map(|theme| theme.name()).collect();
+    let separators: Vec<&str> = separator::PRESETS.iter().map(|(name, _)| *name).chain([separator::CUSTOM]).collect();
+    // One slot width for both rows, so their arrows share columns.
+    let widest = themes.iter().chain(&separators).map(|name| name.width()).max().unwrap_or(0);
+    let mut body = Vec::new();
+    for (index, item) in STYLE_ITEMS.iter().enumerate() {
+        let focused = index == app.cursor;
+        let (name, choice) = match item {
+            StyleItem::Theme => {
+                let current = app.config.theme;
+                let position = Theme::ALL.iter().position(|theme| *theme == current);
+                ("Theme", Choice { value: current.name(), position, count: Theme::ALL.len() })
+            }
+            StyleItem::Separator => {
+                let current = &app.config.separator;
+                let (value, position) = (separator::name(current), separator::position(current));
+                ("Separator", Choice { value, position, count: separator::PRESETS.len() })
+            }
+        };
+        body.push(spread(vec![name_span(name, focused, true)], picker(choice, widest, focused), inner));
+    }
+    (body, app.cursor, "↑/↓ picks a row · ←/→ changes it · esc back".to_string())
 }
 
-/// `◂ short-giraffe ▸`: one picked value, since the full list outgrows narrow cards.
-fn theme_picker(current: Theme, focused: bool) -> Vec<Span<'static>> {
-    let position = Theme::ALL.iter().position(|theme| *theme == current).unwrap_or(0) + 1;
+/// One value out of a list; `position` is none for a value the list lacks.
+struct Choice {
+    value: &'static str,
+    position: Option<usize>,
+    count: usize,
+}
+
+/// `3/7  ◂ short-giraffe ▸`: one picked value, since full lists outgrow narrow cards.
+fn picker(choice: Choice, widest: usize, focused: bool) -> Vec<Span<'static>> {
     let arrows = |arrow: &str| if focused { text(arrow) } else { muted(arrow) };
-    let widest = Theme::ALL.iter().map(|theme| theme.name().width()).max().unwrap_or(0);
-    let mut spans = vec![muted(format!("{position}/{}  ", Theme::ALL.len())), arrows("◂ ")];
-    spans.extend(card::slot(focus(current.name()), widest));
+    let position = choice.position.map_or("–".to_string(), |index| (index + 1).to_string());
+    let value = if focused { focus(choice.value) } else { text(choice.value) };
+    let mut spans = vec![muted(format!("{position}/{}  ", choice.count)), arrows("◂ ")];
+    spans.extend(card::slot(value, widest));
     spans.push(arrows(" ▸"));
     spans
 }

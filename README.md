@@ -19,7 +19,7 @@ Icons need a [Nerd Font](https://www.nerdfonts.com). Turn each one on or off wit
 ## Use
 
 ```sh
-statusmaxxx                   # TUI: segments, agents, theme; changes save as you make them
+statusmaxxx                   # TUI: segments, agents, style; changes save as you make them
 statusmaxxx install claude amp
 statusmaxxx status
 statusmaxxx uninstall amp
@@ -54,7 +54,7 @@ Command agents run a small wrapper script in `~/.config/statusmaxxx/hosts/`. It 
 segments = ["worktree", "branch", "changes", "issue", "model", "context"]
 theme = "terminal"          # terminal, short-giraffe, catppuccin, dracula, nord, gruvbox, light
 icons = ["worktree", "branch", "issue", "model", "context"]   # or true / false for all / none
-separator = "  "
+separator = " · "           # any text; the TUI offers "  ", " · ", " │ ", " | ", " › ", " / "
 
 [hosts.amp]                 # Amp shows its own model, so it gets its own list
 segments = ["worktree", "branch", "issue"]

@@ -123,7 +123,7 @@ async function main(): Promise<number> {
   try {
     await tui(["wait", "Segments", "--timeout", "8000"]);
     const home = await snapshot("home");
-    must(home, "home", "Segments", "Agents", "Theme", "Quit", "Choose what the line shows");
+    must(home, "home", "Segments", "Agents", "Style", "terminal theme · space separator", "Quit", "Choose what the line shows");
     mustNot(home, "home", "Look");
     must(home, "home", "app:app-auth", "smx-1-auth", "SMX-1 Fix the auth flow", "(In Progress)", "Opus", "42%");
     const homeStepper = stepper(home, "home");
@@ -211,10 +211,19 @@ async function main(): Promise<number> {
     cardChrome(installed, "agent-amp-installed");
 
     await press("esc", "esc", "down", "enter", "right");
-    const look = await snapshot("look");
-    must(look, "look", "Theme", "short-giraffe");
-    mustNot(look, "look", "Icons");
-    cardChrome(look, "look");
+    const style = await snapshot("style");
+    must(style, "style", "Theme", "short-giraffe", "Separator", "space");
+    mustNot(style, "style", "Icons");
+    mustNot(previewLine(style), "style", "·");
+    cardChrome(style, "style");
+
+    // The divider shows in the preview, and both pickers keep their arrows in one column.
+    await press("down", "right");
+    const dot = await snapshot("style-separator-dot");
+    must(dot, "style-separator-dot", "dot");
+    must(previewLine(dot), "style-separator-dot", "smx-1-auth · ✓ · ");
+    const arrowColumns = dot.split("\n").filter((row) => /Theme|Separator/u.test(row)).map((row) => row.indexOf("◂"));
+    if (new Set(arrowColumns).size !== 1) failed.push(`style-separator-dot: arrows at columns ${arrowColumns}`);
 
     await tui(["resize", "80", "24"]);
     await press("esc", "enter");

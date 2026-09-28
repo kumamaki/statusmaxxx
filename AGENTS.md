@@ -17,6 +17,7 @@ src/
   segment.rs       Segment → Pieces (text + Role + url)
   render.rs        Pieces → ANSI line, or {"text","url"} JSON for plugin shims
   theme.rs         Role → color per theme
+  separator.rs     separator presets the TUI steps through
   config.rs        ~/.config/statusmaxxx/config.toml
   paths.rs         XDG config/cache dirs, binary path, atomic writes
   tui/

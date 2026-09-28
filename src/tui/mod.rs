@@ -16,6 +16,7 @@ use crate::config::Config;
 use crate::host::{Host, InstallState};
 use crate::payload::Session;
 use crate::segment::Segment;
+use crate::separator;
 
 pub fn run() -> Result<()> {
     let mut app = App::new(Config::load()?)?;
@@ -32,18 +33,18 @@ enum Screen {
     Segments(Option<Host>),
     Agents,
     Agent(Host),
-    Theme,
+    Style,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HomeItem {
     Segments,
     Agents,
-    Theme,
+    Style,
     Quit,
 }
 
-const HOME: [HomeItem; 4] = [HomeItem::Segments, HomeItem::Agents, HomeItem::Theme, HomeItem::Quit];
+const HOME: [HomeItem; 4] = [HomeItem::Segments, HomeItem::Agents, HomeItem::Style, HomeItem::Quit];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AgentItem {
@@ -53,6 +54,14 @@ enum AgentItem {
 }
 
 const AGENT_ITEMS: [AgentItem; 3] = [AgentItem::Install, AgentItem::Uninstall, AgentItem::Segments];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StyleItem {
+    Theme,
+    Separator,
+}
+
+const STYLE_ITEMS: [StyleItem; 2] = [StyleItem::Theme, StyleItem::Separator];
 
 struct AgentRow {
     host: Host,
@@ -66,7 +75,7 @@ struct App {
     sample: Session,
     screen: Screen,
     cursor: usize,
-    /// The agent Home and Theme preview; ←/→ on Home cycles it.
+    /// The agent Home and Style preview; ←/→ on Home cycles it.
     preview_host: Host,
     /// Outcome of the last action on this screen.
     notice: Vec<Line<'static>>,
@@ -156,7 +165,7 @@ impl App {
             Screen::Segments(_) => Segment::ALL.len(),
             Screen::Agents => self.agents.len(),
             Screen::Agent(_) => AGENT_ITEMS.len(),
-            Screen::Theme => 1,
+            Screen::Style => STYLE_ITEMS.len(),
         }
     }
 
@@ -183,7 +192,7 @@ impl App {
             Screen::Home => self.done = true,
             Screen::Segments(None) => self.open(Screen::Home, 0),
             Screen::Agents => self.open(Screen::Home, 1),
-            Screen::Theme => self.open(Screen::Home, 2),
+            Screen::Style => self.open(Screen::Home, 2),
             Screen::Agent(host) => self.open(Screen::Agents, self.agent_index(host)),
             Screen::Segments(Some(host)) => self.open(Screen::Agent(host), 2),
         }
@@ -194,7 +203,7 @@ impl App {
             Screen::Home => match HOME[self.cursor] {
                 HomeItem::Segments => self.open(Screen::Segments(None), 0),
                 HomeItem::Agents => self.open(Screen::Agents, 0),
-                HomeItem::Theme => self.open(Screen::Theme, 0),
+                HomeItem::Style => self.open(Screen::Style, 0),
                 HomeItem::Quit => self.done = true,
             },
             Screen::Segments(host) => self.toggle_segment(host),
@@ -210,7 +219,7 @@ impl App {
                     self.open(Screen::Segments(Some(host)), 0);
                 }
             },
-            Screen::Theme => self.step(1),
+            Screen::Style => self.step(1),
         }
     }
 
@@ -234,8 +243,16 @@ impl App {
                 self.save();
             }
             Screen::Segments(host) => self.toggle_segment(host),
-            Screen::Theme => {
-                self.config.theme = if offset > 0 { self.config.theme.next() } else { self.config.theme.previous() };
+            Screen::Style => {
+                match STYLE_ITEMS[self.cursor] {
+                    StyleItem::Theme => {
+                        self.config.theme =
+                            if offset > 0 { self.config.theme.next() } else { self.config.theme.previous() };
+                    }
+                    StyleItem::Separator => {
+                        self.config.separator = separator::step(&self.config.separator, offset).to_string();
+                    }
+                }
                 self.save();
             }
             _ => {}

@@ -6,6 +6,7 @@ mod paths;
 mod payload;
 mod render;
 mod segment;
+mod separator;
 mod theme;
 mod tui;
 
