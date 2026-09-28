@@ -11,7 +11,8 @@ use crate::paths;
 use crate::payload::Session;
 use crate::theme::Role;
 
-const TITLE_LIMIT: usize = 36;
+/// Issue titles run long; the id carries the meaning, the words are a reminder.
+const TITLE_WORDS: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -269,7 +270,7 @@ fn issues(issues: &[Issue], sources: &Sources) -> Vec<Piece> {
         return vec![];
     };
     let text = match &first.title {
-        Some(title) => format!("{} {}", first.id, truncate(title, TITLE_LIMIT)),
+        Some(title) => format!("{} {}", first.id, first_words(title, TITLE_WORDS)),
         None => first.id.clone(),
     };
     let mut pieces =
@@ -283,12 +284,9 @@ fn issues(issues: &[Issue], sources: &Sources) -> Vec<Piece> {
     pieces
 }
 
-fn truncate(text: &str, limit: usize) -> String {
-    if text.chars().count() <= limit {
-        return text.to_string();
-    }
-    let kept: String = text.chars().take(limit - 1).collect();
-    format!("{}…", kept.trim_end())
+fn first_words(text: &str, count: usize) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() <= count { words.join(" ") } else { format!("{}…", words[..count].join(" ")) }
 }
 
 #[cfg(test)]
@@ -326,5 +324,11 @@ mod tests {
         assert_eq!(text, "app:app-auth");
         let text: String = worktree(&repo(None), &sources).into_iter().map(|piece| piece.text).collect();
         assert_eq!(text, "app");
+    }
+
+    #[test]
+    fn issue_titles_keep_their_first_four_words() {
+        assert_eq!(first_words("Fix the auth flow", 4), "Fix the auth flow");
+        assert_eq!(first_words("Point Manage payment at Suby's customer portal", 4), "Point Manage payment at…");
     }
 }
