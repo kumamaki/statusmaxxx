@@ -10,9 +10,9 @@ pub fn render(host: Host, config: &Config, session: &Session) -> String {
     let segments = segments(host, config, &Sources::new(session, &config.icons));
     match host.output() {
         Output::Ansi { hyperlinks } => ansi(&segments, config, hyperlinks),
-        Output::Json { colored } => {
+        Output::Json { ansi: renders_ansi } => {
             let url = segments.iter().flat_map(|(_, pieces)| pieces).find_map(|piece| piece.url.clone());
-            let text = if colored { ansi(&segments, config, false) } else { plain(&segments, &config.separator) };
+            let text = if renders_ansi { ansi(&segments, config, true) } else { plain(&segments, &config.separator) };
             json!({ "text": text, "url": url }).to_string()
         }
     }

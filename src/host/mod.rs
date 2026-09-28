@@ -51,10 +51,10 @@ pub enum Output {
     Ansi {
         hyperlinks: bool,
     },
-    /// `{"text": …, "url": …}` for plugin shims. `colored` when the agent renders
-    /// ANSI in its status area (pi does; Amp prints the escapes literally).
+    /// `{"text": …, "url": …}` for plugin shims. `ansi` when the agent renders escapes
+    /// in its status area, colors and OSC 8 links alike (pi does; Amp prints them literally).
     Json {
-        colored: bool,
+        ansi: bool,
     },
 }
 
@@ -120,9 +120,9 @@ impl Host {
 
     pub fn output(self) -> Output {
         match self.tier() {
-            // Only Claude Code documents OSC 8 links; elsewhere they could print as garbage.
+            // Claude Code documents OSC 8 links. Droid strips them (checked live); others could print garbage.
             Tier::Command => Output::Ansi { hyperlinks: self == Host::Claude },
-            Tier::Plugin | Tier::BuiltIn => Output::Json { colored: self == Host::Pi },
+            Tier::Plugin | Tier::BuiltIn => Output::Json { ansi: self == Host::Pi },
         }
     }
 

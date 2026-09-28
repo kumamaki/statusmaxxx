@@ -87,7 +87,7 @@ Before trusting a new agent's docs, record a real payload: run it once, then rea
 
 Check a hook live by asking the agent, one-shot, to quote any context line that starts with `statusmaxxx:`.
 
-ANSI in plugin status areas, checked with tuistory: pi renders it, Amp prints the escapes literally. `Output::Json { colored }` follows that.
+ANSI in status areas, checked with tuistory: pi renders colors and passes OSC 8 links through, Amp prints escapes literally, Droid renders colors but strips links. `Output` follows that. Check links by recording the agent's raw output with `script` and grepping for `]8;;`.
 
 TUI changes: `just qa` drives every screen with tuistory in a sandbox and writes text and PNG captures to `qa-results/`. Look at the PNGs, not only the text.
 

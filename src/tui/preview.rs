@@ -58,7 +58,7 @@ pub fn line(host: Host, config: &Config, sample: &Sample, marked: Option<Segment
     }
     let session = as_sent_by(host, &sample.session);
     let sources = Sources::with_repo(&session, &config.icons, sample.repo.clone(), sample.issues.clone());
-    let colored = !matches!(host.output(), Output::Json { colored: false });
+    let colored = !matches!(host.output(), Output::Json { ansi: false });
     // Drawn one segment at a time, so the marked one knows where it starts.
     let draw = |ansi: String| match ansi.into_text() {
         Ok(text) => text.lines.into_iter().next().map_or_else(Vec::new, |line| line.spans),

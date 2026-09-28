@@ -22,7 +22,7 @@ pub struct Issue {
 }
 
 /// How an agent keeps the status line's issue current. Agents read it at session start.
-pub const HOW_TO: &str = "When you start work on a tracked issue (Linear, GitHub, beads, or any other tracker), run `statusmaxxx issue set <id> \"<title>\" --state \"<state>\"` so the status line shows it. When the state changes, run `statusmaxxx issue set <id> --state \"<state>\"`. Once the work lands, run `statusmaxxx issue clear`.";
+pub const HOW_TO: &str = "When you start work on a tracked issue (Linear, GitHub, beads, or any other tracker), run `statusmaxxx issue set <id> \"<title>\" --state \"<state>\" --url \"<issue url>\"` so the status line shows it and links to it. When the state changes, run `statusmaxxx issue set <id> --state \"<state>\"`. Once the work lands, run `statusmaxxx issue clear`.";
 
 impl Issue {
     /// `ENG-42 "Fix auth" (In Progress)`
