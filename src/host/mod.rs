@@ -204,6 +204,16 @@ impl Host {
         Ok(report)
     }
 
+    /// Built-in agents keep their own copy of the segment list, so a config change is
+    /// written into it; the others read the config on every render. Returns the items
+    /// written, when it wrote any.
+    pub fn sync(self, old: &Config, new: &Config) -> Result<Option<Vec<&'static str>>> {
+        match self.tier() {
+            Tier::BuiltIn => builtin::sync(self, old, new),
+            Tier::Command | Tier::Plugin => Ok(None),
+        }
+    }
+
     pub fn uninstall(self) -> Result<Vec<String>> {
         let mut report = match self.tier() {
             Tier::Command => command::uninstall(self)?,

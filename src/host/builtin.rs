@@ -51,6 +51,19 @@ pub fn install(host: Host, config: &Config) -> Result<Vec<String>> {
     write(host, Some(items.iter().map(|item| item.to_string()).collect()))
 }
 
+/// Rewrites the agent's items for `new` when it still shows what `old` gave it, so a
+/// list statusmaxxx wrote follows the config and one edited elsewhere stays. Returns
+/// the new items when it wrote them.
+pub fn sync(host: Host, old: &Config, new: &Config) -> Result<Option<Vec<&'static str>>> {
+    let (before, after) = (items(host, old), items(host, new));
+    let ours = current(host)?.is_some_and(|current| current.iter().eq(before.iter()));
+    if before == after || !ours {
+        return Ok(None);
+    }
+    write(host, Some(after.iter().map(|item| item.to_string()).collect()))?;
+    Ok(Some(after))
+}
+
 /// Puts back the items we replaced, or the agent's defaults when there were none.
 pub fn uninstall(host: Host) -> Result<Vec<String>> {
     let previous = replaced::take(host)?;

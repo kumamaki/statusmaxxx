@@ -44,6 +44,8 @@ statusmaxxx uninstall amp
 
 Codex and Gemini cannot show custom text, so they only get the segments they have an item for. For them, worktree and issue are not available.
 
+The other agents read the config on every refresh, so changes show right away. Codex and Gemini keep their own copy of the item list; the TUI rewrites it whenever you change segments, as long as it is still the list statusmaxxx wrote. A list you edited by hand is left alone. After editing `config.toml` by hand, run `statusmaxxx install codex gemini` again.
+
 Command agents run a small wrapper script in `~/.config/statusmaxxx/hosts/`. It calls `statusmaxxx render --host <agent>` with the session JSON on stdin. Plugin agents run a generated shim that calls the same command.
 
 ## Config

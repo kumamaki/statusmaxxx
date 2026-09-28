@@ -70,6 +70,8 @@ struct AgentRow {
 
 struct App {
     config: Config,
+    /// The config as last written, to tell built-in agents what changed.
+    saved: Config,
     agents: Vec<AgentRow>,
     sample: preview::Sample,
     screen: Screen,
@@ -88,6 +90,7 @@ struct App {
 impl App {
     fn new(config: Config) -> Result<Self> {
         let mut app = Self {
+            saved: config.clone(),
             config,
             agents: Vec::new(),
             sample: preview::sample(),
@@ -312,9 +315,29 @@ impl App {
         self.save();
     }
 
+    /// Writes the config, and the item lists of built-in agents that copy it.
     fn save(&mut self) {
         if let Err(error) = self.config.save() {
             self.notice = vec![Line::from(card::focus(format!("Cannot save the config: {error:#}")))];
+            return;
+        }
+        self.notice = Host::ALL.into_iter().filter_map(|host| self.sync(host)).collect();
+        self.saved = self.config.clone();
+        if let Err(error) = self.reload_agents() {
+            self.notice.push(Line::from(card::focus(format!("Cannot read agent state: {error:#}"))));
+        }
+    }
+
+    /// `✓ Updated Codex CLI`, when `host` needed rewriting.
+    fn sync(&self, host: Host) -> Option<Line<'static>> {
+        match host.sync(&self.saved, &self.config) {
+            Ok(None) => None,
+            Ok(Some(items)) => {
+                let tail =
+                    if items.is_empty() { " · it shows no items now" } else { " · new sessions show the change" };
+                Some(Line::from(vec![card::success(format!("✓ Updated {}", host.label())), card::muted(tail)]))
+            }
+            Err(error) => Some(Line::from(card::focus(format!("Cannot update {}: {error:#}", host.label())))),
         }
     }
 

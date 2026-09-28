@@ -12,10 +12,16 @@ import { join } from "node:path";
 
 const SESSION = "statusmaxxx-tui";
 const COLS = 110;
-const ROWS = 40;
+// Tall enough for the whole Segments list below an action notice; 80x24 gets its own step.
+const ROWS = 48;
 const ROOT = join(import.meta.dir, "..");
 const BINARY = join(ROOT, "target/debug/statusmaxxx");
 const ARTIFACTS = join(ROOT, "qa-results");
+
+const CODEX_CONFIG = ".codex/config.toml";
+const CODEX_DEFAULT_ITEMS = ["current-dir", "git-branch", "model-with-reasoning", "context-used"];
+const GEMINI_SETTINGS = ".gemini/settings.json";
+const GEMINI_HAND_EDITED = `${JSON.stringify({ ui: { footer: { items: ["model-name"] } } })}\n`;
 
 const failed: string[] = [];
 let step = 0;
@@ -91,10 +97,11 @@ function cardChrome(screen: string, label: string): void {
   must(screen, label, "╭─────────────────╮", "│   statusmaxxx   ╰", "╯  esc  │", "├", "╰");
 }
 
-/** HOME with four detected agents; Droid already runs a status line script of its own. */
+/** HOME with six detected agents. Droid runs a status line script of its own, Codex
+shows the items statusmaxxx gives the default segments, and Gemini a list edited by hand. */
 async function fixture(): Promise<{ home: string; env: Record<string, string> }> {
   const home = await mkdtemp(join(tmpdir(), "statusmaxxx-qa-"));
-  for (const directory of [".claude", ".factory", ".pi/agent", ".config/amp"]) {
+  for (const directory of [".claude", ".factory", ".pi/agent", ".config/amp", ".codex", ".gemini"]) {
     await mkdir(join(home, directory), { recursive: true });
   }
   const env = {
@@ -104,6 +111,8 @@ async function fixture(): Promise<{ home: string; env: Record<string, string> }>
   };
   const droidLine = { statusLine: { type: "command", command: join(home, ".factory/statusline.sh") } };
   await Bun.write(join(home, ".factory/settings.json"), JSON.stringify(droidLine));
+  await Bun.write(join(home, CODEX_CONFIG), `[tui]\nstatus_line = ${JSON.stringify(CODEX_DEFAULT_ITEMS)}\n`);
+  await Bun.write(join(home, GEMINI_SETTINGS), GEMINI_HAND_EDITED);
   return { home, env };
 }
 
@@ -117,6 +126,7 @@ async function main(): Promise<number> {
   await mkdir(ARTIFACTS, { recursive: true });
   await tui(["close"], true);
   const { home: sandbox, env } = await fixture();
+  const sandboxFile = (path: string) => Bun.file(join(sandbox, path)).text();
 
   const envFlags = Object.entries(env).flatMap(([key, value]) => ["--env", `${key}=${value}`]);
   await sh(["tuistory", "launch", `${BINARY} config`, "-s", SESSION, "--cwd", sandbox, "--cols", String(COLS), "--rows", String(ROWS), "--background", "--timeout", "8000", ...envFlags]);
@@ -130,7 +140,7 @@ async function main(): Promise<number> {
     const homeStepper = stepper(home, "home");
     if (homeStepper.name !== "Claude Code") failed.push(`home: switcher shows ${JSON.stringify(homeStepper.name)}`);
     mustNot(home, "home", "Claude Code · Available", "other agents");
-    must(home, "home", "0 installed · 4 available · 6 not found");
+    must(home, "home", "1 installed · 5 available · 4 not found");
     cardChrome(home, "home");
 
     await press("right");
@@ -156,12 +166,19 @@ async function main(): Promise<number> {
     const hidden = await snapshot("segments-branch-hidden");
     mustNot(previewLine(hidden), "segments-branch-hidden", "eng-42");
     mustNot(hidden, "segments-branch-hidden", "↴");
+    // Codex copies the list, so it follows; Gemini's hand-edited list stays.
+    must(hidden, "segments-branch-hidden", "✓ Updated Codex CLI · new sessions show the change");
+    must(await sandboxFile(CODEX_CONFIG), "segments-branch-hidden-codex", '"current-dir", "model-with-reasoning", "context-used"');
+    mustNot(hidden, "segments-branch-hidden", "Updated Gemini");
+    mustNot(await sandboxFile(CODEX_CONFIG), "segments-branch-hidden-codex", "git-branch");
+    if ((await sandboxFile(GEMINI_SETTINGS)) !== GEMINI_HAND_EDITED) failed.push("segments-branch-hidden: Gemini settings changed");
     if (rowOrder(hidden).join() !== rowOrder(segments).join()) {
       failed.push(`segments-branch-hidden: rows moved from ${rowOrder(segments)} to ${rowOrder(hidden)}`);
     }
     await press("space");
     const restored = await snapshot("segments-branch-restored");
     must(previewLine(restored), "segments-branch-restored", "eng-42");
+    must(await sandboxFile(CODEX_CONFIG), "segments-branch-restored-codex", '"git-branch"');
     points(restored, "segments-branch-pointer", "\ue725");
     if (rowOrder(restored).join() !== rowOrder(segments).join()) {
       failed.push(`segments-branch-restored: rows moved to ${rowOrder(restored)}`);
@@ -223,7 +240,9 @@ async function main(): Promise<number> {
     await press("esc");
     must(await snapshot("agents-installed"), "agents-installed", "Installed");
     const blue = await tui(["snapshot", "--fg", "#0a84ff", "--trim"], true);
-    if (blue.trim() !== "Installed") failed.push(`agents-after-install: blue text is ${JSON.stringify(blue.trim())}`);
+    // Codex, kept in sync above, and Amp.
+    const blueRows = blue.split("\n").map((row) => row.trim()).filter(Boolean);
+    if (blueRows.join() !== "Installed,Installed") failed.push(`agents-after-install: blue text is ${JSON.stringify(blueRows)}`);
 
     await press("esc", "down", "enter", "right");
     const style = await snapshot("style");
