@@ -162,6 +162,11 @@ impl Host {
             }
             // Copilot's payload is undocumented; its maintainers say it carries cost.
             Segment::Cost => matches!(self, Host::Claude | Host::Copilot),
+            // Claude, Droid, and Cursor send a session id in the status line; the
+            // shims have no session field to pass.
+            Segment::Session => {
+                matches!(self, Host::Claude | Host::Cursor | Host::Qwen | Host::Droid | Host::Copilot)
+            }
         }
     }
 

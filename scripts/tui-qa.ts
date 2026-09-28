@@ -158,7 +158,7 @@ async function main(): Promise<number> {
     await press("enter");
     const segments = await snapshot("segments");
     must(segments, "segments", "Every agent uses this list, unless it has its own · Saved as you go", "Shown", "Hidden", "not in Amp", "◂ Shown");
-    if (rowOrder(segments).join(", ") !== "Directory, Worktree, Branch, Changes, Current issue, Model, Context, Cost") {
+    if (rowOrder(segments).join(", ") !== "Directory, Worktree, Branch, Changes, Current issue, Model, Context, Session, Cost") {
       failed.push(`segments: rows are ${rowOrder(segments)}`);
     }
     cardChrome(segments, "segments");

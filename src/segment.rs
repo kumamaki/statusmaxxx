@@ -22,18 +22,20 @@ pub enum Segment {
     Branch,
     Changes,
     Issue,
+    Session,
     Model,
     Context,
     Cost,
 }
 
 impl Segment {
-    pub const ALL: [Segment; 8] = [
+    pub const ALL: [Segment; 9] = [
         Segment::Directory,
         Segment::Worktree,
         Segment::Branch,
         Segment::Changes,
         Segment::Issue,
+        Segment::Session,
         Segment::Model,
         Segment::Context,
         Segment::Cost,
@@ -46,6 +48,7 @@ impl Segment {
             Segment::Branch => "branch",
             Segment::Changes => "changes",
             Segment::Issue => "issue",
+            Segment::Session => "session",
             Segment::Model => "model",
             Segment::Context => "context",
             Segment::Cost => "cost",
@@ -60,6 +63,7 @@ impl Segment {
             Segment::Branch => "Branch",
             Segment::Changes => "Changes",
             Segment::Issue => "Current issue",
+            Segment::Session => "Session",
             Segment::Model => "Model",
             Segment::Context => "Context",
             Segment::Cost => "Cost",
@@ -73,6 +77,7 @@ impl Segment {
             Segment::Branch => "Current branch, or the commit when detached",
             Segment::Changes => "Changed files, or a check when the tree is clean",
             Segment::Issue => "Issues the agent set with `statusmaxxx issue set`",
+            Segment::Session => "Session name the agent reports, or the short id",
             Segment::Model => "Model the agent reports",
             Segment::Context => "Context window used",
             Segment::Cost => "Session cost the agent reports",
@@ -91,6 +96,7 @@ impl Segment {
             // `±3` and `✓` already are the glyph.
             Segment::Changes => "",
             Segment::Issue => "\u{f41b}",
+            Segment::Session => "\u{f120}",
             Segment::Model => "\u{f06a9}",
             Segment::Context => "\u{f200}",
             Segment::Cost => "",
@@ -206,6 +212,10 @@ impl Segment {
                 None => vec![],
             },
             Segment::Issue => issues(sources.issues()?, sources),
+            Segment::Session => session_label(session)
+                .map(|label| Piece::new(Role::Muted, sources.label(self, &label)))
+                .into_iter()
+                .collect(),
             Segment::Model => {
                 session.model.iter().map(|model| Piece::new(Role::Model, sources.label(self, model))).collect()
             }
@@ -284,6 +294,15 @@ fn issues(issues: &[Issue], sources: &Sources) -> Vec<Piece> {
     pieces
 }
 
+/// The session's name when the agent sends one; otherwise the id's short form.
+/// Session ids are UUIDs, so eight characters identify the session.
+fn session_label(session: &Session) -> Option<String> {
+    if let Some(name) = &session.session_name {
+        return Some(first_words(name, TITLE_WORDS));
+    }
+    session.session_id.as_deref().map(|id| id.get(..8).unwrap_or(id).to_string())
+}
+
 fn first_words(text: &str, count: usize) -> String {
     let words: Vec<&str> = text.split_whitespace().collect();
     if words.len() <= count { words.join(" ") } else { format!("{}…", words[..count].join(" ")) }
@@ -316,14 +335,39 @@ mod tests {
 
     #[test]
     fn linked_worktrees_show_their_folder_after_the_repository() {
-        let session =
-            Session { cwd: PathBuf::from("/work/app"), model: None, context_used_percent: None, cost_usd: None };
+        let session = Session {
+            cwd: PathBuf::from("/work/app"),
+            model: None,
+            context_used_percent: None,
+            cost_usd: None,
+            session_id: None,
+            session_name: None,
+        };
         let no_icons = BTreeSet::new();
         let sources = Sources::new(&session, &no_icons);
         let text: String = worktree(&repo(Some("app-auth")), &sources).into_iter().map(|piece| piece.text).collect();
         assert_eq!(text, "app:app-auth");
         let text: String = worktree(&repo(None), &sources).into_iter().map(|piece| piece.text).collect();
         assert_eq!(text, "app");
+    }
+
+    #[test]
+    fn the_session_segment_prefers_the_name_then_the_short_id() {
+        let session = |id: Option<&str>, name: Option<&str>| Session {
+            cwd: PathBuf::from("/work/app"),
+            model: None,
+            context_used_percent: None,
+            cost_usd: None,
+            session_id: id.map(str::to_string),
+            session_name: name.map(str::to_string),
+        };
+        let named = session(Some("82570de0-186d-4628-9996-a5b2a03955ea"), Some("Tidy up"));
+        assert_eq!(session_label(&named).as_deref(), Some("Tidy up"));
+        let unnamed = session(Some("82570de0-186d-4628-9996-a5b2a03955ea"), None);
+        assert_eq!(session_label(&unnamed).as_deref(), Some("82570de0"));
+        let titled = session(None, Some("Claude sessions messaging each other"));
+        assert_eq!(session_label(&titled).as_deref(), Some("Claude sessions messaging each…"));
+        assert_eq!(session_label(&session(None, None)), None);
     }
 
     #[test]

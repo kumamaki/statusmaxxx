@@ -18,6 +18,9 @@ pub struct Payload {
     /// Droid's shape for the context window; `null` before the first reply.
     context: Option<DroidContext>,
     cost: Option<Cost>,
+    session_id: Option<String>,
+    /// Claude Code sends the session's title once it has one, named or generated.
+    session_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +67,8 @@ pub struct Session {
     pub model: Option<String>,
     pub context_used_percent: Option<f64>,
     pub cost_usd: Option<f64>,
+    pub session_id: Option<String>,
+    pub session_name: Option<String>,
 }
 
 impl Payload {
@@ -93,6 +98,8 @@ impl Payload {
                 .and_then(|window| window.used_percentage)
                 .or(self.context.and_then(|context| context.percentage)),
             cost_usd: self.cost.and_then(|cost| cost.total_cost_usd),
+            session_id: self.session_id,
+            session_name: self.session_name,
         })
     }
 }
@@ -128,5 +135,18 @@ mod tests {
             assert_eq!(session.context_used_percent, context);
             assert_eq!(session.cost_usd, cost);
         }
+    }
+
+    #[test]
+    fn carries_the_session_id_and_name() {
+        // Claude Code sends both; the name appears once the session has a title.
+        let session = Payload::parse(
+            r#"{"cwd":"/repo","session_id":"82570de0-186d-4628-9996-a5b2a03955ea","session_name":"Tidy up"}"#,
+        )
+        .unwrap()
+        .into_session()
+        .unwrap();
+        assert_eq!(session.session_id.as_deref(), Some("82570de0-186d-4628-9996-a5b2a03955ea"));
+        assert_eq!(session.session_name.as_deref(), Some("Tidy up"));
     }
 }

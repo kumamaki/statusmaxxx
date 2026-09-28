@@ -4,7 +4,7 @@
 
 ![The status line: shop/web · shop:auth · eng-42 · ±3 · ENG-42 Fix login (In Progress) · Opus · 42%](docs/status-line.png)
 
-One status line for every coding agent. You configure it once, and each agent shows the same segments: directory, worktree, branch, changes, the issue the agent is working on, model, context, and cost.
+One status line for every coding agent. You configure it once, and each agent shows the same segments: directory, worktree, branch, changes, the issue the agent is working on, session, model, context, and cost.
 
 ## Install
 
@@ -119,7 +119,7 @@ separator = " · "           # any text; the TUI offers "  ", " · ", " │ ", "
 segments = ["worktree", "branch", "issue"]
 ```
 
-Segments: `directory`, `worktree`, `branch`, `changes`, `issue`, `model`, `context`, `cost`. `git` also works and means `branch` and `changes`. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
+Segments: `directory`, `worktree`, `branch`, `changes`, `issue`, `session`, `model`, `context`, `cost`. `git` also works and means `branch` and `changes`. `session` shows the session's name when the agent sends one (Claude Code titles its sessions), else the first eight characters of the session id; Claude Code, Cursor, Qwen, Droid, and Copilot send one. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
 
 ## Debugging
 

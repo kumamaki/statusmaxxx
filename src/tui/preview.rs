@@ -28,6 +28,8 @@ pub fn sample() -> Sample {
             model: Some("Opus".into()),
             context_used_percent: Some(42.0),
             cost_usd: Some(1.23),
+            session_id: Some("82570de0-186d-4628-9996-a5b2a03955ea".into()),
+            session_name: None,
         },
         repo: Repo {
             git_dir: root.join(".git"),
@@ -109,5 +111,7 @@ fn as_sent_by(host: Host, sample: &Session) -> Session {
         model: sample.model.clone().filter(|_| host.supports(Segment::Model)),
         context_used_percent: sample.context_used_percent.filter(|_| host.supports(Segment::Context)),
         cost_usd: sample.cost_usd.filter(|_| host.supports(Segment::Cost)),
+        session_id: sample.session_id.clone().filter(|_| host.supports(Segment::Session)),
+        session_name: sample.session_name.clone().filter(|_| host.supports(Segment::Session)),
     }
 }
