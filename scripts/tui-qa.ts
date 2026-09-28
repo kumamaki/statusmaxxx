@@ -145,7 +145,9 @@ async function main(): Promise<number> {
 
     await press("right");
     const droid = await snapshot("home-droid");
-    must(droid, "home-droid", "Factory Droid doesn't report its context");
+    // Droid sends everything the default segments need; only cost, hidden, is missing.
+    mustNot(droid, "home-droid", "doesn't report");
+    must(previewLine(droid), "home-droid", "42%");
     const droidStepper = stepper(droid, "home-droid");
     if (droidStepper.name !== "Factory Droid") failed.push(`home-droid: switcher shows ${JSON.stringify(droidStepper.name)}`);
     if (droidStepper.left !== homeStepper.left || droidStepper.right !== homeStepper.right) {

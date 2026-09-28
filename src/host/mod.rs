@@ -157,8 +157,9 @@ impl Host {
             Segment::Directory | Segment::Worktree | Segment::Branch | Segment::Changes | Segment::Issue => true,
             // The Amp and OpenCode shims only know the workspace folder.
             Segment::Model => !matches!(self, Host::Amp | Host::Opencode),
-            // Droid sends `context: null` before the first reply; its later shape is unrecorded.
-            Segment::Context => matches!(self, Host::Claude | Host::Cursor | Host::Qwen | Host::Copilot | Host::Pi),
+            Segment::Context => {
+                matches!(self, Host::Claude | Host::Cursor | Host::Qwen | Host::Droid | Host::Copilot | Host::Pi)
+            }
             // Copilot's payload is undocumented; its maintainers say it carries cost.
             Segment::Cost => matches!(self, Host::Claude | Host::Copilot),
         }

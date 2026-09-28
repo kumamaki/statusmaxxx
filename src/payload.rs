@@ -15,6 +15,8 @@ pub struct Payload {
     workspace_roots: Option<Vec<PathBuf>>,
     model: Option<Model>,
     context_window: Option<ContextWindow>,
+    /// Droid's shape for the context window; `null` before the first reply.
+    context: Option<DroidContext>,
     cost: Option<Cost>,
 }
 
@@ -43,6 +45,11 @@ impl Model {
 #[derive(Debug, Deserialize)]
 struct ContextWindow {
     used_percentage: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DroidContext {
+    percentage: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,7 +88,10 @@ impl Payload {
         Ok(Session {
             cwd,
             model: self.model.and_then(Model::into_name),
-            context_used_percent: self.context_window.and_then(|window| window.used_percentage),
+            context_used_percent: self
+                .context_window
+                .and_then(|window| window.used_percentage)
+                .or(self.context.and_then(|context| context.percentage)),
             cost_usd: self.cost.and_then(|cost| cost.total_cost_usd),
         })
     }
@@ -98,6 +108,12 @@ mod tests {
                 r#"{"workspace":{"current_dir":"/repo"},"model":{"display_name":"Opus"},
                     "context_window":{"used_percentage":42.5},"cost":{"total_cost_usd":1.5}}"#,
                 ("/repo", Some("Opus"), Some(42.5), Some(1.5)),
+            ),
+            // Droid 0.228: its own context object, recorded from a live session.
+            (
+                r#"{"cwd":"/repo","model":{"id":"glm-5.3-flash","display_name":"GLM-5.3-Flash"},
+                    "context":{"token_limit":250000,"percentage":18,"display":"18%"}}"#,
+                ("/repo", Some("GLM-5.3-Flash"), Some(18.0), None),
             ),
             // Cursor's hooks: workspace folders and a bare model name.
             (
