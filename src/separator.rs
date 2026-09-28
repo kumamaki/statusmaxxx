@@ -1,10 +1,10 @@
 //! Separators the TUI offers. The config stores the text itself, so any
-//! string works; one that is not listed here shows as `custom`.
+//! string works; one that is not listed here shows as Custom.
 
 pub const PRESETS: [(&str, &str); 6] =
-    [("space", "  "), ("dot", " · "), ("bar", " │ "), ("pipe", " | "), ("chevron", " › "), ("slash", " / ")];
+    [("Space", "  "), ("Dot", " · "), ("Bar", " │ "), ("Pipe", " | "), ("Chevron", " › "), ("Slash", " / ")];
 
-pub const CUSTOM: &str = "custom";
+pub const CUSTOM: &str = "Custom";
 
 pub fn position(text: &str) -> Option<usize> {
     PRESETS.iter().position(|(_, preset)| *preset == text)

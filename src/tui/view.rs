@@ -86,7 +86,7 @@ fn icon_slot(app: &App, segment: Segment) -> Span<'static> {
 fn shown_stepper(state: Span<'static>, focused: bool) -> Vec<Span<'static>> {
     let arrow = |glyph: &str| if focused { muted(glyph) } else { Span::raw(" ".repeat(glyph.width())) };
     let mut spans = vec![arrow("◂ ")];
-    spans.extend(card::slot(state, "hidden".width()));
+    spans.extend(card::slot(state, "Hidden".width()));
     spans.push(arrow(" ▸"));
     spans
 }
@@ -132,7 +132,7 @@ fn home(app: &App) -> Screenful {
             HomeItem::Agents => ("Agents", agent_counts(app)),
             HomeItem::Style => {
                 let separator = separator::name(&app.config.separator);
-                ("Style", format!("{} theme · {separator} separator", app.config.theme.name()))
+                ("Style", format!("{} theme · {separator} separator", app.config.theme.label()))
             }
             HomeItem::Quit => ("Quit", String::new()),
         };
@@ -167,12 +167,12 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
             focus_line = body.len();
         }
         let state = match (focused && app.moving, *shown) {
-            (true, _) => focus("moving"),
-            (false, true) => text("shown"),
-            (false, false) => muted("hidden"),
+            (true, _) => focus("Moving"),
+            (false, true) => text("Shown"),
+            (false, false) => muted("Hidden"),
         };
         let mut name = vec![icon_slot(app, *segment)];
-        name.push(name_span(segment.name(), focused, *shown));
+        name.push(name_span(segment.label(), focused, *shown));
         body.push(spread(name, shown_stepper(state, focused && !app.moving), inner));
         let description = match host {
             Some(host) if !host.supports(*segment) => format!("{} cannot show this", host.label()),
@@ -201,7 +201,7 @@ fn agents(app: &App, inner: usize) -> Screenful {
             let focused = index == app.cursor;
             let state = state_name(row.detected, &row.state);
             let state = if row.state == InstallState::Installed { text(state) } else { muted(state) };
-            let own = if app.config.hosts.contains_key(&row.host) { muted("own segments  ") } else { Span::raw("") };
+            let own = if app.config.hosts.contains_key(&row.host) { muted("Own segments  ") } else { Span::raw("") };
             spread(vec![name_span(row.host.label(), focused, row.detected)], vec![own, state], inner)
         })
         .collect();
@@ -255,7 +255,7 @@ fn agent(app: &App, host: Host, inner: usize) -> Screenful {
 }
 
 fn style(app: &App, inner: usize) -> Screenful {
-    let themes: Vec<&str> = Theme::ALL.iter().map(|theme| theme.name()).collect();
+    let themes: Vec<&str> = Theme::ALL.iter().map(|theme| theme.label()).collect();
     let separators: Vec<&str> = separator::PRESETS.iter().map(|(name, _)| *name).chain([separator::CUSTOM]).collect();
     // One slot width for both rows, so their arrows share columns.
     let widest = themes.iter().chain(&separators).map(|name| name.width()).max().unwrap_or(0);
@@ -266,7 +266,7 @@ fn style(app: &App, inner: usize) -> Screenful {
             StyleItem::Theme => {
                 let current = app.config.theme;
                 let position = Theme::ALL.iter().position(|theme| *theme == current);
-                ("Theme", Choice { value: current.name(), position, count: Theme::ALL.len() })
+                ("Theme", Choice { value: current.label(), position, count: Theme::ALL.len() })
             }
             StyleItem::Separator => {
                 let current = &app.config.separator;
@@ -308,10 +308,10 @@ fn name_span(name: &str, focused: bool, active: bool) -> Span<'static> {
 
 fn state_name(detected: bool, state: &InstallState) -> &'static str {
     match (detected, state) {
-        (false, _) => "not found",
-        (true, InstallState::Installed) => "installed",
-        (true, InstallState::NotInstalled) => "available",
-        (true, InstallState::Occupied(_)) => "another status line",
+        (false, _) => "Not found",
+        (true, InstallState::Installed) => "Installed",
+        (true, InstallState::NotInstalled) => "Available",
+        (true, InstallState::Occupied(_)) => "Another status line",
     }
 }
 
@@ -325,12 +325,12 @@ fn install_summary(host: Host) -> String {
 }
 
 fn segment_names(segments: &[Segment]) -> String {
-    segments.iter().map(|segment| segment.name()).collect::<Vec<_>>().join(" · ")
+    segments.iter().map(|segment| segment.label()).collect::<Vec<_>>().join(" · ")
 }
 
 /// `Amp doesn't report its model and context`
 fn why_missing(host: Host, missing: &[Segment]) -> String {
-    let names: Vec<&str> = missing.iter().map(|segment| segment.name()).collect();
+    let names: Vec<String> = missing.iter().map(|segment| segment.label().to_lowercase()).collect();
     let names = match names.split_last() {
         Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
         _ => names.join(""),

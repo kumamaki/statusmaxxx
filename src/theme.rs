@@ -48,15 +48,16 @@ impl Theme {
         Theme::Light,
     ];
 
-    pub fn name(self) -> &'static str {
+    /// How the TUI titles the theme; the config uses the kebab-case variant name.
+    pub fn label(self) -> &'static str {
         match self {
-            Theme::Terminal => "terminal",
-            Theme::ShortGiraffe => "short-giraffe",
-            Theme::Catppuccin => "catppuccin",
-            Theme::Dracula => "dracula",
-            Theme::Nord => "nord",
-            Theme::Gruvbox => "gruvbox",
-            Theme::Light => "light",
+            Theme::Terminal => "Terminal",
+            Theme::ShortGiraffe => "Short Giraffe",
+            Theme::Catppuccin => "Catppuccin",
+            Theme::Dracula => "Dracula",
+            Theme::Nord => "Nord",
+            Theme::Gruvbox => "Gruvbox",
+            Theme::Light => "Light",
         }
     }
 

@@ -72,7 +72,7 @@ function stepper(screen: string, label: string): { name: string; left: number; r
 
 /** Segment names in the order the Segments screen lists them. */
 function rowOrder(screen: string): string[] {
-  return [...screen.matchAll(/│ {3}(?:\S  |   )([a-z]+) +(?:◂ +)?(?:shown|hidden|moving)/gu)].map((match) => match[1]);
+  return [...screen.matchAll(/│ {3}(?:\S  |   )([A-Z][a-z]+(?: [a-z]+)?) +(?:◂ +)?(?:Shown|Hidden|Moving)/gu)].map((match) => match[1]);
 }
 
 /** The preview line: the header row that shows the sample worktree. */
@@ -122,12 +122,12 @@ async function main(): Promise<number> {
   try {
     await tui(["wait", "Segments", "--timeout", "8000"]);
     const home = await snapshot("home");
-    must(home, "home", "Segments", "Agents", "Style", "terminal theme · dot separator", "Quit", "Choose what the line shows");
+    must(home, "home", "Segments", "Agents", "Style", "Terminal theme · Dot separator", "Quit", "Choose what the line shows");
     mustNot(home, "home", "Look");
     must(home, "home", "shop/web", "shop:auth", "eng-42", "±3", "ENG-42 Fix login", "(In Progress)", "Opus", "42%");
     const homeStepper = stepper(home, "home");
     if (homeStepper.name !== "Claude Code") failed.push(`home: switcher shows ${JSON.stringify(homeStepper.name)}`);
-    mustNot(home, "home", "Claude Code · available", "other agents");
+    mustNot(home, "home", "Claude Code · Available", "other agents");
     must(home, "home", "0 installed · 4 available · 6 not found");
     cardChrome(home, "home");
 
@@ -143,8 +143,8 @@ async function main(): Promise<number> {
 
     await press("enter");
     const segments = await snapshot("segments");
-    must(segments, "segments", "Every agent uses this list", "shown", "hidden", "not in Amp", "◂ shown");
-    if (rowOrder(segments).join(" ") !== "directory worktree branch changes issue model context cost") {
+    must(segments, "segments", "Every agent uses this list", "Shown", "Hidden", "not in Amp", "◂ Shown");
+    if (rowOrder(segments).join(", ") !== "Directory, Worktree, Branch, Changes, Current issue, Model, Context, Cost") {
       failed.push(`segments: rows are ${rowOrder(segments)}`);
     }
     cardChrome(segments, "segments");
@@ -167,14 +167,14 @@ async function main(): Promise<number> {
 
     // Carry branch below changes: the list and the status line both follow.
     await press("m");
-    must(await snapshot("segments-branch-picked-up"), "segments-branch-picked-up", "moving", "enter puts it down");
+    must(await snapshot("segments-branch-picked-up"), "segments-branch-picked-up", "Moving", "enter puts it down");
     await press("down", "enter");
     const moved = await snapshot("segments-branch-moved");
     const order = rowOrder(moved);
-    if (order.indexOf("changes") > order.indexOf("branch")) failed.push(`segments-branch-moved: order is ${order}`);
+    if (order.indexOf("Changes") > order.indexOf("Branch")) failed.push(`segments-branch-moved: order is ${order}`);
     const line = previewLine(moved);
     if (line.indexOf("±3") > line.indexOf("eng-42")) failed.push(`segments-branch-moved: preview is ${line.trim()}`);
-    mustNot(moved, "segments-branch-moved", "moving");
+    mustNot(moved, "segments-branch-moved", "Moving");
     await press("m", "up", "enter");
 
     // ←/→ flip shown and hidden on the focused row, like space.
@@ -194,13 +194,13 @@ async function main(): Promise<number> {
 
     await press("esc", "down", "enter");
     const agents = await snapshot("agents");
-    must(agents, "agents", "Claude Code", "Amp", "Codex CLI", "available", "not found");
+    must(agents, "agents", "Claude Code", "Amp", "Codex CLI", "Available", "Not found");
     cardChrome(agents, "agents");
 
     await press("down", "down", "down", "down", "down");
     const amp = await snapshot("agents-amp");
     must(amp, "agents-amp", "Amp doesn't report its model and context");
-    mustNot(amp, "agents-amp", "◂", "Amp · available");
+    mustNot(amp, "agents-amp", "◂", "Amp · Available");
     mustNot(amp.split("\n").slice(0, 6).join("\n"), "agents-amp", "Opus");
 
     await press("enter");
@@ -214,7 +214,7 @@ async function main(): Promise<number> {
 
     await press("esc", "esc", "down", "enter", "right");
     const style = await snapshot("style");
-    must(style, "style", "Theme", "short-giraffe", "Separator", "dot");
+    must(style, "style", "Theme", "Short Giraffe", "Separator", "Dot");
     mustNot(style, "style", "Icons");
     must(previewLine(style), "style", "eng-42 · ±3 · ");
     cardChrome(style, "style");
@@ -222,7 +222,7 @@ async function main(): Promise<number> {
     // The divider shows in the preview, and both pickers keep their arrows in one column.
     await press("down", "right");
     const bar = await snapshot("style-separator-bar");
-    must(bar, "style-separator-bar", "bar");
+    must(bar, "style-separator-bar", "Bar");
     must(previewLine(bar), "style-separator-bar", "eng-42 │ ±3 │ ");
     const arrowColumns = bar.split("\n").filter((row) => /Theme|Separator/u.test(row)).map((row) => row.indexOf("◂"));
     if (new Set(arrowColumns).size !== 1) failed.push(`style-separator-bar: arrows at columns ${arrowColumns}`);

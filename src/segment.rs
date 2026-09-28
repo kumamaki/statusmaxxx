@@ -51,6 +51,20 @@ impl Segment {
         }
     }
 
+    /// How the TUI titles the segment; `name` is what the config says.
+    pub fn label(self) -> &'static str {
+        match self {
+            Segment::Directory => "Directory",
+            Segment::Worktree => "Worktree",
+            Segment::Branch => "Branch",
+            Segment::Changes => "Changes",
+            Segment::Issue => "Current issue",
+            Segment::Model => "Model",
+            Segment::Context => "Context",
+            Segment::Cost => "Cost",
+        }
+    }
+
     pub fn description(self) -> &'static str {
         match self {
             Segment::Directory => "Working directory, relative to the repository",
