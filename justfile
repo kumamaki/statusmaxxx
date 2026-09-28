@@ -49,6 +49,10 @@ check: lint test
 qa: build
     bun scripts/tui-qa.ts
 
+# Regenerate the README images in docs/.
+shots: build
+    bun scripts/readme-shots.ts
+
 # Scan history and uncommitted changes for secrets.
 secrets:
     gitleaks git --no-banner --redact

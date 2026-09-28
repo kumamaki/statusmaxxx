@@ -1,10 +1,10 @@
 # statusmaxxx
 
-One status line for every coding agent. You configure it once, and each agent shows the same segments: directory, worktree, branch, changes, the issue the agent is working on, model, context, and cost.
+[![ci](https://github.com/kumamaki/statusmaxxx/actions/workflows/ci.yml/badge.svg)](https://github.com/kumamaki/statusmaxxx/actions/workflows/ci.yml)
 
-```
- shop/web ·  shop:auth ·  eng-42 · ±3 ·  ENG-42 Fix login (In Progress) · 󰚩 Opus ·  42%
-```
+![The status line: shop/web · shop:auth · eng-42 · ±3 · ENG-42 Fix login (In Progress) · Opus · 42%](docs/status-line.png)
+
+One status line for every coding agent. You configure it once, and each agent shows the same segments: directory, worktree, branch, changes, the issue the agent is working on, model, context, and cost.
 
 ## Install
 
@@ -40,6 +40,8 @@ statusmaxxx uninstall amp
 
 `statusmaxxx` opens a card with a live preview of the line at the top. The preview uses a made-up repository and issue, so every segment you turn on shows something; the real line reads your worktree. Every change is saved as you make it.
 
+![The home screen: live preview, an agent switcher, and the menu](docs/tui-home.png)
+
 | Screen | Keys |
 |---|---|
 | Home | `←/→` switches which agent the preview shows |
@@ -49,7 +51,13 @@ statusmaxxx uninstall amp
 
 `esc` goes back, `q` quits.
 
+![The Segments screen: every segment, shown or hidden](docs/tui-segments.png)
+
+![The Style screen: seven themes and six separator presets](docs/tui-style.png)
+
 ## Agents
+
+![The Agents screen: detected agents and their status](docs/tui-agents.png)
 
 | Agent | How it hooks in | What it edits |
 |---|---|---|
@@ -71,22 +79,6 @@ Checked against the real agent: Claude Code, Cursor, Droid, Amp, pi, and Codex. 
 The other agents read the config on every refresh, so changes show right away. Codex and Gemini keep their own copy of the item list; the TUI rewrites it whenever you change segments, as long as it is still the list statusmaxxx wrote. A list you edited by hand is left alone. After editing `config.toml` by hand, run `statusmaxxx install codex gemini` again.
 
 Command agents run a small wrapper script in `~/.config/statusmaxxx/hosts/`. It calls `statusmaxxx render --host <agent>` with the session JSON on stdin. Plugin agents run a generated shim that calls the same command.
-
-## Config
-
-`~/.config/statusmaxxx/config.toml`, written by the TUI:
-
-```toml
-segments = ["directory", "worktree", "branch", "changes", "issue", "model", "context"]
-theme = "terminal"          # terminal, short-giraffe, catppuccin, dracula, nord, gruvbox, light
-icons = ["directory", "worktree", "branch", "issue", "model", "context"]   # or true / false for all / none
-separator = " · "           # any text; the TUI offers "  ", " · ", " │ ", " | ", " › ", " / "
-
-[hosts.amp]                 # Amp shows its own model, so it gets its own list
-segments = ["worktree", "branch", "issue"]
-```
-
-Segments: `directory`, `worktree`, `branch`, `changes`, `issue`, `model`, `context`, `cost`. `git` also works and means `branch` and `changes`. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
 
 ## Issues
 
@@ -113,6 +105,22 @@ Issues are kept per worktree, in that worktree's own git dir. They survive resta
 
 The hook runs at startup, on resume, and after compaction. It tells the agent what this worktree shows (`ENG-42 "Fix auth" (In Progress)`), or that nothing is set, and how to update it. Try it with `echo '{"cwd":"'$PWD'"}' | statusmaxxx hook session-start --host claude`.
 
+## Config
+
+`~/.config/statusmaxxx/config.toml`, written by the TUI:
+
+```toml
+segments = ["directory", "worktree", "branch", "changes", "issue", "model", "context"]
+theme = "terminal"          # terminal, short-giraffe, catppuccin, dracula, nord, gruvbox, light
+icons = ["directory", "worktree", "branch", "issue", "model", "context"]   # or true / false for all / none
+separator = " · "           # any text; the TUI offers "  ", " · ", " │ ", " | ", " › ", " / "
+
+[hosts.amp]                 # Amp shows its own model, so it gets its own list
+segments = ["worktree", "branch", "issue"]
+```
+
+Segments: `directory`, `worktree`, `branch`, `changes`, `issue`, `model`, `context`, `cost`. `git` also works and means `branch` and `changes`. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
+
 ## Debugging
 
 A segment that fails shows `✗ <segment>` and writes the reason to stderr. To see it, replay the last session an agent sent:
@@ -122,3 +130,7 @@ statusmaxxx render --host claude < ~/.cache/statusmaxxx/payloads/claude.json
 ```
 
 `render` records every payload it receives in that file, so piping in hand-written JSON replaces the recorded session until the agent refreshes again.
+
+## License
+
+[WTFPL](LICENSE)
