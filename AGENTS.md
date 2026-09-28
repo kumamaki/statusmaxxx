@@ -75,6 +75,7 @@ just release 0.2.0        # bump, commit, tag, push; dist builds the release
 Never hand-edit a real agent config in tests or experiments. Use one of these:
 
 - `just try <agent>`, which uses the agent's own override flag (`claude --settings`, `droid --settings`). For Codex, use `codex -c 'tui.status_line=[…]'`.
+- Cursor: `CURSOR_CONFIG_DIR=<scratch>` with a copy of `~/.cursor/cli-config.json` (it holds `authInfo`, so trash the copy afterwards) plus your `statusLine`. Hooks ignore that variable, so put them in the scratch repo's `.cursor/hooks.json`. `sessionStart` fires on the first prompt, not at launch. The session leaves a folder in `~/.cursor/projects/`; trash it too.
 - `just sandbox <agents…>` for install and uninstall. Every path derives from `HOME`.
 - Project-local plugins in a scratch git repo: `.amp/plugins/`, `.pi/extensions/`.
 
@@ -82,8 +83,9 @@ Before trusting a new agent's docs, record a real payload: run it once, then rea
 
 | | Verified live | From docs only |
 |---|---|---|
-| Status line | Claude Code, Amp, pi, Droid, Codex item ids | Cursor, Qwen, Copilot (payload undocumented), OpenCode (API only in its repo spec), Gemini item ids |
+| Status line | Claude Code, Cursor, Amp, pi, Droid, Codex item ids | Qwen, Copilot (payload undocumented), OpenCode (API only in its repo spec), Gemini item ids |
 | Session-start hook | Claude Code (`claude -p --settings`), Droid (`droid exec --settings`), Cursor (project `.cursor/hooks.json`, `agent -p --trust`) | Qwen, Copilot |
+| Same `session_id` in hook and status line | Cursor | Claude Code, Droid (their status lines carry it; the hook side is from docs), Qwen, Copilot |
 
 Check a hook live by asking the agent, one-shot, to quote any context line that starts with `statusmaxxx:`.
 

@@ -66,7 +66,7 @@ statusmaxxx uninstall amp
 
 Codex and Gemini cannot show custom text, so they only get the segments they have an item for. For them, worktree, changes, and issue are not available.
 
-Checked against the real agent: Claude Code, Droid, Amp, pi, and Codex. Cursor, Qwen, Copilot, OpenCode, and Gemini follow their docs and have not been run yet; if one shows nothing, please open an issue.
+Checked against the real agent: Claude Code, Cursor, Droid, Amp, pi, and Codex. Qwen, Copilot, OpenCode, and Gemini follow their docs and have not been run yet; if one shows nothing, please open an issue.
 
 The other agents read the config on every refresh, so changes show right away. Codex and Gemini keep their own copy of the item list; the TUI rewrites it whenever you change segments, as long as it is still the list statusmaxxx wrote. A list you edited by hand is left alone. After editing `config.toml` by hand, run `statusmaxxx install codex gemini` again.
 
