@@ -32,7 +32,7 @@ pub fn card(app: &App, width: usize) -> (Card, usize) {
 fn header(app: &App, inner: usize) -> Vec<Line<'static>> {
     let host = previewed(app);
     let mut header = vec![
-        card::center(card::fit(preview::line(host, &app.config, &app.sample), inner), inner),
+        card::center(card::fit(preview::line(host, &app.config, &app.sample, marked(app)), inner), inner),
         card::center(agent_control(host, cycles_preview(app.screen)), inner),
     ];
     let missing = preview::missing(host, &app.config);
@@ -79,6 +79,14 @@ fn shown_stepper(state: Span<'static>, focused: bool) -> Vec<Span<'static>> {
     spans.extend(card::slot(state, "hidden".width()));
     spans.push(arrow(" ▸"));
     spans
+}
+
+/// The focused segment row, underlined in the preview so the row and its part of the line connect.
+fn marked(app: &App) -> Option<Segment> {
+    match app.screen {
+        Screen::Segments(_) => Some(app.segment_order[app.cursor]),
+        _ => None,
+    }
 }
 
 fn previewed(app: &App) -> Host {

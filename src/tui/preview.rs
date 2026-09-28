@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use ansi_to_tui::IntoText;
-use ratatui::text::{Line, Text};
+use ratatui::style::Modifier;
+use ratatui::text::{Line, Span};
 
 use super::card;
 use crate::config::Config;
@@ -46,25 +47,54 @@ pub fn sample() -> Sample {
     }
 }
 
-/// What `host` would show for the sample session.
-pub fn line(host: Host, config: &Config, sample: &Sample) -> Line<'static> {
+/// What `host` would show for the sample session, with `marked` underlined.
+pub fn line(host: Host, config: &Config, sample: &Sample, marked: Option<Segment>) -> Line<'static> {
+    let mark = |segment: Segment, spans: Vec<Span<'static>>| {
+        if marked == Some(segment) { spans.into_iter().map(underlined).collect() } else { spans }
+    };
     if host.tier() == Tier::BuiltIn {
         // Built-in agents draw their own items, so the preview names the item ids.
-        let items: Vec<&str> =
-            config.segments_for(host).iter().filter_map(|segment| host::builtin_item(host, *segment)).collect();
-        return Line::from(card::muted(items.join(" · ")));
+        let items = config.segments_for(host).iter().filter_map(|segment| {
+            host::builtin_item(host, *segment).map(|item| mark(*segment, vec![card::muted(item)]))
+        });
+        return join(items, vec![card::muted(" · ")]);
     }
     let session = as_sent_by(host, &sample.session);
     let sources = Sources::with_repo(&session, &config.icons, sample.repo.clone(), sample.issues.clone());
-    let segments = render::segments(host, config, &sources);
-    match host.output() {
-        Output::Ansi { .. } | Output::Json { colored: true } => render::ansi(&segments, config, false)
-            .into_text()
-            .map(|text: Text| text.lines.into_iter().next().unwrap_or_default())
-            .unwrap_or_else(|error| Line::from(card::focus(format!("Preview failed: {error}")))),
-        // Agents that print escapes literally show plain text in their own colors.
-        Output::Json { colored: false } => Line::from(card::text(render::plain(&segments, &config.separator))),
+    let colored = !matches!(host.output(), Output::Json { colored: false });
+    // Drawn one segment at a time, so the marked one knows where it starts and ends.
+    let draw = |ansi: String| match ansi.into_text() {
+        Ok(text) => text.lines.into_iter().next().map_or_else(Vec::new, |line| line.spans),
+        Err(error) => vec![card::focus(format!("Preview failed: {error}"))],
+    };
+    let segments = render::segments(host, config, &sources).into_iter().map(|part| {
+        let spans = if colored {
+            draw(render::ansi(std::slice::from_ref(&part), config, false))
+        } else {
+            // Agents that print escapes literally show plain text in their own colors.
+            vec![card::text(render::plain(std::slice::from_ref(&part), ""))]
+        };
+        mark(part.0, spans)
+    });
+    let separator =
+        if colored { draw(render::ansi_separator(config)) } else { vec![card::text(config.separator.clone())] };
+    join(segments, separator)
+}
+
+fn underlined(span: Span<'static>) -> Span<'static> {
+    let style = span.style.add_modifier(Modifier::UNDERLINED);
+    span.style(style)
+}
+
+fn join(parts: impl Iterator<Item = Vec<Span<'static>>>, separator: Vec<Span<'static>>) -> Line<'static> {
+    let mut spans = Vec::new();
+    for (index, part) in parts.enumerate() {
+        if index > 0 {
+            spans.extend(separator.iter().cloned());
+        }
+        spans.extend(part);
     }
+    Line::from(spans)
 }
 
 /// Segments `host` is set to show but cannot.

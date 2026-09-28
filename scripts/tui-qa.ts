@@ -75,6 +75,10 @@ function rowOrder(screen: string): string[] {
   return [...screen.matchAll(/│ {3}(?:\S  |   )([a-z]+) +(?:◂ +)?(?:shown|hidden|moving)/gu)].map((match) => match[1]);
 }
 
+/** Only the underlined text on screen. tuistory times out when there is none,
+and its error text holds no screen content, so that reads as nothing underlined. */
+const underlined = () => tui(["snapshot", "--underline", "--trim"], true);
+
 /** The preview line: the first header row. */
 function previewLine(screen: string): string {
   return screen.split("\n")[3] ?? "";
@@ -141,6 +145,9 @@ async function main(): Promise<number> {
       failed.push(`segments: rows are ${rowOrder(segments)}`);
     }
     cardChrome(segments, "segments");
+    const markedDirectory = await underlined();
+    must(markedDirectory, "segments-underline", "shop/web");
+    mustNot(markedDirectory, "segments-underline", "eng-42", "shop:auth");
 
     await press("down", "down", "space");
     const hidden = await snapshot("segments-branch-hidden");
@@ -151,6 +158,9 @@ async function main(): Promise<number> {
     await press("space");
     const restored = await snapshot("segments-branch-restored");
     must(previewLine(restored), "segments-branch-restored", "eng-42");
+    const markedBranch = await underlined();
+    must(markedBranch, "segments-branch-underline", "eng-42");
+    mustNot(markedBranch, "segments-branch-underline", "shop/web", "±3");
     if (rowOrder(restored).join() !== rowOrder(segments).join()) {
       failed.push(`segments-branch-restored: rows moved to ${rowOrder(restored)}`);
     }

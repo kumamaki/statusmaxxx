@@ -11,20 +11,20 @@ pub fn render(host: Host, config: &Config, session: &Session) -> String {
     match host.output() {
         Output::Ansi { hyperlinks } => ansi(&segments, config, hyperlinks),
         Output::Json { colored } => {
-            let url = segments.iter().flatten().find_map(|piece| piece.url.clone());
+            let url = segments.iter().flat_map(|(_, pieces)| pieces).find_map(|piece| piece.url.clone());
             let text = if colored { ansi(&segments, config, false) } else { plain(&segments, &config.separator) };
             json!({ "text": text, "url": url }).to_string()
         }
     }
 }
 
-/// The non-empty segments `host` shows, in order.
-pub fn segments(host: Host, config: &Config, sources: &Sources) -> Vec<Vec<Piece>> {
+/// The non-empty segments `host` shows, in order, each with what it drew.
+pub fn segments(host: Host, config: &Config, sources: &Sources) -> Vec<(Segment, Vec<Piece>)> {
     config
         .segments_for(host)
         .iter()
-        .map(|segment| render_segment(*segment, sources))
-        .filter(|pieces| !pieces.is_empty())
+        .map(|segment| (*segment, render_segment(*segment, sources)))
+        .filter(|(_, pieces)| !pieces.is_empty())
         .collect()
 }
 
@@ -36,13 +36,16 @@ fn render_segment(segment: Segment, sources: &Sources) -> Vec<Piece> {
     })
 }
 
-pub fn ansi(segments: &[Vec<Piece>], config: &Config, hyperlinks: bool) -> String {
-    let separator = config.theme.paint(Role::Muted, &config.separator);
+pub fn ansi(segments: &[(Segment, Vec<Piece>)], config: &Config, hyperlinks: bool) -> String {
     segments
         .iter()
-        .map(|pieces| pieces.iter().map(|piece| paint(piece, config.theme, hyperlinks)).collect::<String>())
+        .map(|(_, pieces)| pieces.iter().map(|piece| paint(piece, config.theme, hyperlinks)).collect::<String>())
         .collect::<Vec<_>>()
-        .join(&separator)
+        .join(&ansi_separator(config))
+}
+
+pub fn ansi_separator(config: &Config) -> String {
+    config.theme.paint(Role::Muted, &config.separator)
 }
 
 fn paint(piece: &Piece, theme: Theme, hyperlinks: bool) -> String {
@@ -53,10 +56,10 @@ fn paint(piece: &Piece, theme: Theme, hyperlinks: bool) -> String {
     }
 }
 
-pub fn plain(segments: &[Vec<Piece>], separator: &str) -> String {
+pub fn plain(segments: &[(Segment, Vec<Piece>)], separator: &str) -> String {
     segments
         .iter()
-        .map(|pieces| pieces.iter().map(|piece| piece.text.as_str()).collect::<String>())
+        .map(|(_, pieces)| pieces.iter().map(|piece| piece.text.as_str()).collect::<String>())
         .collect::<Vec<_>>()
         .join(separator)
 }
