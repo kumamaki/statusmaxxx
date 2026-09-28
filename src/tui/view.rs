@@ -31,10 +31,20 @@ pub fn card(app: &App, width: usize) -> (Card, usize) {
 /// Centered: the previewed line, whose line it is, and what that agent leaves out.
 fn header(app: &App, inner: usize) -> Vec<Line<'static>> {
     let host = previewed(app);
-    let mut header = vec![
-        card::center(card::fit(preview::line(host, &app.config, &app.sample, marked(app)), inner), inner),
+    let marked = marked(app);
+    let (line, marked_at) = preview::line(host, &app.config, &app.sample, marked);
+    let line = card::fit(line, inner);
+    let lead = inner.saturating_sub(line.width()) / 2;
+    let mut header = Vec::new();
+    // The row stays while a hidden segment is focused, so the header never jumps.
+    if marked.is_some() {
+        header.push(pointer(marked_at.filter(|column| *column < line.width()).map(|column| lead + column)));
+    }
+    header.extend([
+        card::center(line, inner),
+        Line::default(),
         card::center(agent_control(host, cycles_preview(app.screen)), inner),
-    ];
+    ]);
     let missing = preview::missing(host, &app.config);
     if !missing.is_empty() {
         header.push(card::center(Line::from(muted(why_missing(host, &missing))), inner));
@@ -81,7 +91,15 @@ fn shown_stepper(state: Span<'static>, focused: bool) -> Vec<Span<'static>> {
     spans
 }
 
-/// The focused segment row, underlined in the preview so the row and its part of the line connect.
+/// `↴` over the first cell of the focused segment; a blank row when it is not in the line.
+fn pointer(column: Option<usize>) -> Line<'static> {
+    match column {
+        Some(column) => Line::from(vec![Span::raw(" ".repeat(column)), focus("↴")]),
+        None => Line::default(),
+    }
+}
+
+/// The focused segment row, pointed at in the preview so the row and its part of the line connect.
 fn marked(app: &App) -> Option<Segment> {
     match app.screen {
         Screen::Segments(_) => Some(app.segment_order[app.cursor]),

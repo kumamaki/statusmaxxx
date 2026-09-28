@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use ansi_to_tui::IntoText;
-use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::card;
@@ -47,22 +46,20 @@ pub fn sample() -> Sample {
     }
 }
 
-/// What `host` would show for the sample session, with `marked` underlined.
-pub fn line(host: Host, config: &Config, sample: &Sample, marked: Option<Segment>) -> Line<'static> {
-    let mark = |segment: Segment, spans: Vec<Span<'static>>| {
-        if marked == Some(segment) { spans.into_iter().map(underlined).collect() } else { spans }
-    };
+/// What `host` would show for the sample session, and the column `marked` starts at.
+pub fn line(host: Host, config: &Config, sample: &Sample, marked: Option<Segment>) -> (Line<'static>, Option<usize>) {
     if host.tier() == Tier::BuiltIn {
         // Built-in agents draw their own items, so the preview names the item ids.
-        let items = config.segments_for(host).iter().filter_map(|segment| {
-            host::builtin_item(host, *segment).map(|item| mark(*segment, vec![card::muted(item)]))
-        });
-        return join(items, vec![card::muted(" · ")]);
+        let items = config
+            .segments_for(host)
+            .iter()
+            .filter_map(|segment| host::builtin_item(host, *segment).map(|item| (*segment, vec![card::muted(item)])));
+        return join(items, vec![card::muted(" · ")], marked);
     }
     let session = as_sent_by(host, &sample.session);
     let sources = Sources::with_repo(&session, &config.icons, sample.repo.clone(), sample.issues.clone());
     let colored = !matches!(host.output(), Output::Json { colored: false });
-    // Drawn one segment at a time, so the marked one knows where it starts and ends.
+    // Drawn one segment at a time, so the marked one knows where it starts.
     let draw = |ansi: String| match ansi.into_text() {
         Ok(text) => text.lines.into_iter().next().map_or_else(Vec::new, |line| line.spans),
         Err(error) => vec![card::focus(format!("Preview failed: {error}"))],
@@ -74,27 +71,30 @@ pub fn line(host: Host, config: &Config, sample: &Sample, marked: Option<Segment
             // Agents that print escapes literally show plain text in their own colors.
             vec![card::text(render::plain(std::slice::from_ref(&part), ""))]
         };
-        mark(part.0, spans)
+        (part.0, spans)
     });
     let separator =
         if colored { draw(render::ansi_separator(config)) } else { vec![card::text(config.separator.clone())] };
-    join(segments, separator)
+    join(segments, separator, marked)
 }
 
-fn underlined(span: Span<'static>) -> Span<'static> {
-    let style = span.style.add_modifier(Modifier::UNDERLINED);
-    span.style(style)
-}
-
-fn join(parts: impl Iterator<Item = Vec<Span<'static>>>, separator: Vec<Span<'static>>) -> Line<'static> {
+fn join(
+    parts: impl Iterator<Item = (Segment, Vec<Span<'static>>)>,
+    separator: Vec<Span<'static>>,
+    marked: Option<Segment>,
+) -> (Line<'static>, Option<usize>) {
     let mut spans = Vec::new();
-    for (index, part) in parts.enumerate() {
+    let mut marked_at = None;
+    for (index, (segment, part)) in parts.enumerate() {
         if index > 0 {
             spans.extend(separator.iter().cloned());
         }
+        if marked == Some(segment) {
+            marked_at = Some(spans.iter().map(Span::width).sum());
+        }
         spans.extend(part);
     }
-    Line::from(spans)
+    (Line::from(spans), marked_at)
 }
 
 /// Segments `host` is set to show but cannot.

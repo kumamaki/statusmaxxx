@@ -75,13 +75,16 @@ function rowOrder(screen: string): string[] {
   return [...screen.matchAll(/│ {3}(?:\S  |   )([a-z]+) +(?:◂ +)?(?:shown|hidden|moving)/gu)].map((match) => match[1]);
 }
 
-/** Only the underlined text on screen. tuistory times out when there is none,
-and its error text holds no screen content, so that reads as nothing underlined. */
-const underlined = () => tui(["snapshot", "--underline", "--trim"], true);
-
-/** The preview line: the first header row. */
+/** The preview line: the header row that shows the sample worktree. */
 function previewLine(screen: string): string {
-  return screen.split("\n")[3] ?? "";
+  return screen.split("\n").find((row) => row.includes("shop:auth")) ?? "";
+}
+
+/** Whether the ↴ above the preview sits over the first cell of `start`. */
+function points(screen: string, label: string, start: string): void {
+  const pointer = screen.split("\n").find((row) => row.includes("↴"));
+  const column = previewLine(screen).indexOf(start);
+  if (pointer?.indexOf("↴") !== column) failed.push(`${label}: ↴ at ${pointer?.indexOf("↴")}, ${JSON.stringify(start)} at ${column}`);
 }
 
 function cardChrome(screen: string, label: string): void {
@@ -145,22 +148,19 @@ async function main(): Promise<number> {
       failed.push(`segments: rows are ${rowOrder(segments)}`);
     }
     cardChrome(segments, "segments");
-    const markedDirectory = await underlined();
-    must(markedDirectory, "segments-underline", "shop/web");
-    mustNot(markedDirectory, "segments-underline", "eng-42", "shop:auth");
+    points(segments, "segments-pointer", "\uf07b");
 
     await press("down", "down", "space");
     const hidden = await snapshot("segments-branch-hidden");
     mustNot(previewLine(hidden), "segments-branch-hidden", "eng-42");
+    mustNot(hidden, "segments-branch-hidden", "↴");
     if (rowOrder(hidden).join() !== rowOrder(segments).join()) {
       failed.push(`segments-branch-hidden: rows moved from ${rowOrder(segments)} to ${rowOrder(hidden)}`);
     }
     await press("space");
     const restored = await snapshot("segments-branch-restored");
     must(previewLine(restored), "segments-branch-restored", "eng-42");
-    const markedBranch = await underlined();
-    must(markedBranch, "segments-branch-underline", "eng-42");
-    mustNot(markedBranch, "segments-branch-underline", "shop/web", "±3");
+    points(restored, "segments-branch-pointer", "\ue725");
     if (rowOrder(restored).join() !== rowOrder(segments).join()) {
       failed.push(`segments-branch-restored: rows moved to ${rowOrder(restored)}`);
     }
