@@ -20,12 +20,7 @@ pub fn card(app: &App, width: usize) -> (Card, usize) {
         Screen::Agent(host) => agent(app, host, inner),
         Screen::Style => style(app, inner),
     };
-    let mut body = body;
-    if !app.notice.is_empty() {
-        body.push(Line::default());
-        body.extend(app.notice.iter().cloned());
-    }
-    (Card { width, header: header(app, inner), body, hint }, focus_line)
+    (Card { width, header: header(app, inner), body, notice: app.notice.clone(), hint }, focus_line)
 }
 
 /// Centered: the previewed line, whose line it is, and what that agent leaves out.

@@ -55,6 +55,8 @@ pub struct Card {
     pub width: usize,
     pub header: Vec<Line<'static>>,
     pub body: Vec<Line<'static>>,
+    /// The outcome of the last action, in its own section so the body can scroll past it.
+    pub notice: Vec<Line<'static>>,
     pub hint: String,
 }
 
@@ -75,6 +77,12 @@ impl Card {
         lines.push(self.row(Line::default(), inner));
         lines.extend(self.body.iter().skip(scroll).take(body_rows).map(|line| self.row(line.clone(), inner)));
         lines.push(self.row(Line::default(), inner));
+        if !self.notice.is_empty() {
+            lines.push(self.rule('├', '┤'));
+            lines.push(self.row(Line::default(), inner));
+            lines.extend(self.notice.iter().map(|line| self.row(line.clone(), inner)));
+            lines.push(self.row(Line::default(), inner));
+        }
         lines.push(self.rule('├', '┤'));
         lines.push(self.hint_row());
         lines.push(self.rule('╰', '╯'));
@@ -83,7 +91,8 @@ impl Card {
 
     /// Rows the card spends on everything but the body.
     pub fn chrome_rows(&self) -> usize {
-        self.header.len() + 11
+        let notice = if self.notice.is_empty() { 0 } else { self.notice.len() + 3 };
+        self.header.len() + 11 + notice
     }
 
     fn tab_width(label: &str, inset: usize) -> usize {
@@ -210,6 +219,7 @@ mod tests {
                 width,
                 header: vec![Line::from("a header wider than any card could ever hold ".repeat(4))],
                 body: vec![spread(vec![text("left")], vec![muted("right")], Card::inner(width))],
+                notice: vec![Line::from("a notice longer than the card ".repeat(4))],
                 hint: "hint".repeat(40),
             };
             for (index, line) in card.lines(10, 0).iter().enumerate() {
