@@ -16,6 +16,8 @@ const TAB_RIGHT_INSET: usize = 2;
 pub const TEXT: Color = Color::Rgb(0xc8, 0xc8, 0xc8);
 pub const MUTED: Color = Color::Rgb(0x7a, 0x7a, 0x7a);
 pub const FOCUS: Color = Color::Rgb(0xff, 0x45, 0x3a);
+/// Status only: a state worth noticing, like an agent that is set up.
+pub const INFO: Color = Color::Rgb(0x0a, 0x84, 0xff);
 /// Status only: an action that finished.
 pub const SUCCESS: Color = Color::Rgb(0x30, 0xd1, 0x58);
 const BORDER: Color = Color::Rgb(0x5a, 0x5a, 0x5a);
@@ -30,6 +32,10 @@ pub fn muted(content: impl Into<String>) -> Span<'static> {
 
 pub fn focus(content: impl Into<String>) -> Span<'static> {
     Span::styled(content.into(), Style::new().fg(FOCUS))
+}
+
+pub fn info(content: impl Into<String>) -> Span<'static> {
+    Span::styled(content.into(), Style::new().fg(INFO))
 }
 
 pub fn success(content: impl Into<String>) -> Span<'static> {

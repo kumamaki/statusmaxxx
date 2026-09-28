@@ -217,7 +217,12 @@ async function main(): Promise<number> {
     mustNot(green, "agent-amp-installed-green", "new sessions", "Wrote");
     cardChrome(installed, "agent-amp-installed");
 
-    await press("esc", "esc", "down", "enter", "right");
+    await press("esc");
+    must(await snapshot("agents-installed"), "agents-installed", "Installed");
+    const blue = await tui(["snapshot", "--fg", "#0a84ff", "--trim"], true);
+    if (blue.trim() !== "Installed") failed.push(`agents-after-install: blue text is ${JSON.stringify(blue.trim())}`);
+
+    await press("esc", "down", "enter", "right");
     const style = await snapshot("style");
     must(style, "style", "Theme", "Short Giraffe", "Separator", "Dot");
     mustNot(style, "style", "Icons");

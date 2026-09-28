@@ -200,7 +200,7 @@ fn agents(app: &App, inner: usize) -> Screenful {
         .map(|(index, row)| {
             let focused = index == app.cursor;
             let state = state_name(row.detected, &row.state);
-            let state = if row.state == InstallState::Installed { text(state) } else { muted(state) };
+            let state = if row.state == InstallState::Installed { card::info(state) } else { muted(state) };
             let own = if app.config.hosts.contains_key(&row.host) { muted("Own segments  ") } else { Span::raw("") };
             spread(vec![name_span(row.host.label(), focused, row.detected)], vec![own, state], inner)
         })
