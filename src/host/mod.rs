@@ -155,6 +155,9 @@ impl Host {
         }
         match segment {
             Segment::Directory | Segment::Worktree | Segment::Branch | Segment::Changes | Segment::Issue => true,
+            // Status lines send a session id, and the shims read theirs from the
+            // plugin API (Amp's active thread, pi's session manager, OpenCode's route).
+            Segment::Session => true,
             // The Amp and OpenCode shims only know the workspace folder.
             Segment::Model => !matches!(self, Host::Amp | Host::Opencode),
             Segment::Context => {
@@ -162,11 +165,6 @@ impl Host {
             }
             // Copilot's payload is undocumented; its maintainers say it carries cost.
             Segment::Cost => matches!(self, Host::Claude | Host::Copilot),
-            // Claude, Droid, and Cursor send a session id in the status line; the
-            // shims have no session field to pass.
-            Segment::Session => {
-                matches!(self, Host::Claude | Host::Cursor | Host::Qwen | Host::Droid | Host::Copilot)
-            }
         }
     }
 

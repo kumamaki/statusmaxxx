@@ -72,7 +72,7 @@ statusmaxxx uninstall amp
 | Codex CLI | its own `tui.status_line` items | `~/.codex/config.toml` |
 | Gemini CLI | its own `ui.footer.items` | `~/.gemini/settings.json` |
 
-Codex and Gemini cannot show custom text, so they only get the segments they have an item for. For them, worktree, changes, and issue are not available.
+Codex and Gemini cannot show custom text, so they only get the segments they have an item for. For them, worktree, changes, issue, and session are not available.
 
 Checked against the real agent: Claude Code, Cursor, Droid, Amp, pi, and Codex. Qwen, Copilot, OpenCode, and Gemini follow their docs and have not been run yet; if one shows nothing, please open an issue.
 
@@ -119,7 +119,7 @@ separator = " · "           # any text; the TUI offers "  ", " · ", " │ ", "
 segments = ["worktree", "branch", "issue"]
 ```
 
-Segments: `directory`, `worktree`, `branch`, `changes`, `issue`, `session`, `model`, `context`, `cost`. `git` also works and means `branch` and `changes`. `session` shows the session's name when the agent sends one (Claude Code titles its sessions), else the first eight characters of the session id; Claude Code, Cursor, Qwen, Droid, and Copilot send one. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
+Segments: `directory`, `worktree`, `branch`, `changes`, `issue`, `session`, `model`, `context`, `cost`. `git` also works and means `branch` and `changes`. `session` shows the session's name when the agent sends one (Claude Code titles its sessions), else the first eight characters of the session id; every agent but Codex and Gemini sends one — Amp sends its thread id. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
 
 ## Debugging
 

@@ -32,6 +32,8 @@ export default function (pi: ExtensionAPI) {
 				cwd: ctx.cwd,
 				model: ctx.model ? { display_name: ctx.model.name } : undefined,
 				context_window: usage?.percent == null ? undefined : { used_percentage: usage.percent },
+				session_id: ctx.sessionManager.getSessionId(),
+				session_name: ctx.sessionManager.getSessionName(),
 			});
 			ctx.ui.setStatus(STATUS_KEY, text || undefined);
 		} catch (error) {

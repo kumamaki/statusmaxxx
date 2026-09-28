@@ -26,7 +26,9 @@ const tui: TuiPlugin = async (api) => {
     if (running) return
     running = true
     try {
-      setText((await render({ cwd: api.state.path.directory })).text)
+      const route = api.route.current
+      const sessionID = route.name === "session" && typeof route.params?.sessionID === "string" ? route.params.sessionID : undefined
+      setText((await render({ cwd: api.state.path.directory, session_id: sessionID })).text)
     } catch (error) {
       setText(`statusmaxxx: ${error instanceof Error ? error.message : String(error)}`)
     } finally {

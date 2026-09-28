@@ -28,7 +28,7 @@ export default function (amp: PluginAPI) {
 		if (running) return
 		running = true
 		try {
-			const { text, url } = await render({ cwd })
+			const { text, url } = await render({ cwd, session_id: amp.activeThread?.current?.id })
 			item.update({ text, url: url ?? undefined })
 		} catch (error) {
 			item.update({ text: `statusmaxxx: ${error instanceof Error ? error.message : String(error)}` })
