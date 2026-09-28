@@ -322,7 +322,17 @@ impl App {
         let outcome = if install { host.install(&self.config) } else { host.uninstall() };
         self.notice = match outcome {
             Ok(lines) if lines.is_empty() => vec![Line::from(card::muted("Nothing to change"))],
-            Ok(lines) => lines.into_iter().map(|line| Line::from(card::text(line))).collect(),
+            Ok(lines) => {
+                let (done, tail) = if install {
+                    (format!("✓ Installed in {}", host.label()), " · new sessions show the line")
+                } else {
+                    (format!("✓ Removed from {}", host.label()), "")
+                };
+                let headline = Line::from(vec![card::success(done), card::muted(tail)]);
+                // Indented under the headline's text, past the check mark.
+                let details = lines.into_iter().map(|line| Line::from(card::muted(format!("  {line}"))));
+                std::iter::once(headline).chain(details).collect()
+            }
             Err(error) => vec![Line::from(card::focus(format!("{error:#}")))],
         };
         if let Err(error) = self.reload_agents() {

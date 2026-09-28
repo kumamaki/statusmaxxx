@@ -16,6 +16,8 @@ const TAB_RIGHT_INSET: usize = 2;
 pub const TEXT: Color = Color::Rgb(0xc8, 0xc8, 0xc8);
 pub const MUTED: Color = Color::Rgb(0x7a, 0x7a, 0x7a);
 pub const FOCUS: Color = Color::Rgb(0xff, 0x45, 0x3a);
+/// Status only: an action that finished.
+pub const SUCCESS: Color = Color::Rgb(0x30, 0xd1, 0x58);
 const BORDER: Color = Color::Rgb(0x5a, 0x5a, 0x5a);
 
 pub fn text(content: impl Into<String>) -> Span<'static> {
@@ -28,6 +30,10 @@ pub fn muted(content: impl Into<String>) -> Span<'static> {
 
 pub fn focus(content: impl Into<String>) -> Span<'static> {
     Span::styled(content.into(), Style::new().fg(FOCUS))
+}
+
+pub fn success(content: impl Into<String>) -> Span<'static> {
+    Span::styled(content.into(), Style::new().fg(SUCCESS))
 }
 
 /// One option of a choice row; the picked one is red, and bracketed while its row has focus.

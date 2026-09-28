@@ -211,7 +211,10 @@ async function main(): Promise<number> {
     await press("enter");
     await tui(["wait", "Reinstall", "--timeout", "5000"]);
     const installed = await snapshot("agent-amp-installed");
-    must(installed, "agent-amp-installed", "Reinstall", "Wrote <~/.config/amp/plugins/statusmaxxx.ts>");
+    must(installed, "agent-amp-installed", "Reinstall", "✓ Installed in Amp · new sessions show the line", "  Wrote <~/.config/amp/plugins/statusmaxxx.ts>");
+    const green = await tui(["snapshot", "--fg", "#30d158", "--trim"], true);
+    must(green, "agent-amp-installed-green", "✓ Installed in Amp");
+    mustNot(green, "agent-amp-installed-green", "new sessions", "Wrote");
     cardChrome(installed, "agent-amp-installed");
 
     await press("esc", "esc", "down", "enter", "right");

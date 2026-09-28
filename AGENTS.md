@@ -66,7 +66,7 @@ just release 0.2.0        # bump, commit, tag, push; dist builds the release
 - A failing segment renders `✗ <segment>` in the line and explains itself on stderr. It never blanks the whole line, and it never hides the error.
 - Editing another program's config: back it up (`<file>.statusmaxxx.bak`), refuse files we cannot rewrite faithfully (JSONC), remember what we replaced, and restore it on uninstall.
 - Command agents get a wrapper script path, not a command line, because some spawn it without a shell.
-- The TUI follows the house card style, centered in the terminal: hug tabs, four colors (text, muted, red focus, border), two-line items, screen per task, one right-aligned hint. No extra colors, pane layouts, or key legends.
+- The TUI follows the house card style, centered in the terminal: hug tabs, four colors (text, muted, red focus, border) plus green for an action that finished, two-line items, screen per task, one right-aligned hint. No extra colors, pane layouts, or key legends.
 - Logs put dynamic values in `<angle brackets>`. Comments say why.
 
 ## Verifying against real agents
