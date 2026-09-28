@@ -112,6 +112,9 @@ fn previewed(app: &App) -> Host {
 
 type Screenful = (Vec<Line<'static>>, usize, String);
 
+/// On every screen that edits the config, which has no save step.
+const SAVED: &str = "Saved as you go";
+
 fn home(app: &App) -> Screenful {
     let mut body = Vec::new();
     let mut focus_line = 0;
@@ -150,7 +153,7 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
         Some(host) => format!("Only {} uses this list", host.label()),
         None => "Every agent uses this list, unless it has its own".to_string(),
     };
-    let mut body = vec![Line::from(muted(scope)), Line::default()];
+    let mut body = vec![Line::from(muted(format!("{scope} · {SAVED}"))), Line::default()];
     let mut focus_line = 0;
     let rows = app.segment_rows(host);
     for (index, (segment, shown)) in rows.iter().enumerate() {
@@ -254,7 +257,8 @@ fn style(app: &App, inner: usize) -> Screenful {
     let separators: Vec<&str> = separator::PRESETS.iter().map(|(name, _)| *name).chain([separator::CUSTOM]).collect();
     // One slot width for both rows, so their arrows share columns.
     let widest = themes.iter().chain(&separators).map(|name| name.width()).max().unwrap_or(0);
-    let mut body = Vec::new();
+    let mut body = vec![Line::from(muted(SAVED)), Line::default()];
+    let first_row = body.len();
     for (index, item) in STYLE_ITEMS.iter().enumerate() {
         let focused = index == app.cursor;
         let (name, choice) = match item {
@@ -271,7 +275,7 @@ fn style(app: &App, inner: usize) -> Screenful {
         };
         body.push(spread(vec![name_span(name, focused, true)], picker(choice, widest, focused), inner));
     }
-    (body, app.cursor, "↑/↓ picks a row · ←/→ changes it · esc back".to_string())
+    (body, first_row + app.cursor, "↑/↓ picks a row · ←/→ changes it · esc back".to_string())
 }
 
 /// One value out of a list; `position` is none for a value the list lacks.

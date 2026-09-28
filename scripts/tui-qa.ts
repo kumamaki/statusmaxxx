@@ -155,7 +155,7 @@ async function main(): Promise<number> {
 
     await press("enter");
     const segments = await snapshot("segments");
-    must(segments, "segments", "Every agent uses this list", "Shown", "Hidden", "not in Amp", "◂ Shown");
+    must(segments, "segments", "Every agent uses this list, unless it has its own · Saved as you go", "Shown", "Hidden", "not in Amp", "◂ Shown");
     if (rowOrder(segments).join(", ") !== "Directory, Worktree, Branch, Changes, Current issue, Model, Context, Cost") {
       failed.push(`segments: rows are ${rowOrder(segments)}`);
     }
@@ -246,7 +246,7 @@ async function main(): Promise<number> {
 
     await press("esc", "down", "enter", "right");
     const style = await snapshot("style");
-    must(style, "style", "Theme", "Short Giraffe", "Separator", "Dot");
+    must(style, "style", "Saved as you go", "Theme", "Short Giraffe", "Separator", "Dot");
     mustNot(style, "style", "Icons");
     must(previewLine(style), "style", "eng-42 · ±3 · ");
     cardChrome(style, "style");
