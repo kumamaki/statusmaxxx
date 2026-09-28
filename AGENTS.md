@@ -10,8 +10,8 @@ One Rust binary that renders a single status line for many coding agents and wir
 
 ```
 src/
-  main.rs          CLI: config (TUI, default), render, install, uninstall, status, issue
-  payload.rs       stdin JSON (Claude Code shape) → Session
+  main.rs          CLI: config (TUI, default), render, install, uninstall, status, hook, issue
+  payload.rs       stdin JSON (Claude Code shape, plus Droid's and Cursor's) → Session
   git.rs           repo name, linked worktree, git dir, head, changed files
   issue.rs         issues the agent set, stored in the worktree's git dir
   segment.rs       Segment → Pieces (text + Role + url)
@@ -21,7 +21,7 @@ src/
   config.rs        ~/.config/statusmaxxx/config.toml
   paths.rs         XDG config/cache dirs, binary path, atomic writes
   tui/
-    mod.rs         screens, keys, state; every change saves immediately
+    mod.rs         screens, keys, state; every change saves immediately and syncs built-in agents
     card.rs        hug-tab card chrome and palette shared with the house TUIs (fam, Musik)
     view.rs        one card per screen, with a live preview in the header
     preview.rs     what an agent would show for a made-up session and repo
@@ -29,7 +29,7 @@ src/
     mod.rs         Host enum: tier, output format, detection, notes
     command.rs     statusLine-command agents: Claude, Cursor, Qwen, Droid, Copilot
     plugin.rs      shim agents: Amp, pi, OpenCode; sources in shims/
-    builtin.rs     item-only agents: Codex, Gemini (segment → item id)
+    builtin.rs     item-only agents: Codex, Gemini (segment → item id, kept in sync with the config)
     hook.rs        session-start hook: tells command agents which issue the worktree shows
     instructions.rs  the same message as a marked AGENTS.md block, for plugin agents
     wrapper.rs     scripts agents run instead of `statusmaxxx …` command lines
@@ -67,6 +67,7 @@ just release 0.2.0        # bump, commit, tag, push; dist builds the release
 - Editing another program's config: back it up (`<file>.statusmaxxx.bak`), refuse files we cannot rewrite faithfully (JSONC), remember what we replaced, and restore it on uninstall.
 - Command agents get a wrapper script path, not a command line, because some spawn it without a shell.
 - The TUI follows the house card style, centered in the terminal: hug tabs, four colors (text, muted, red focus, border) plus blue for a set-up state and green for an action that finished, two-line items, screen per task, one right-aligned hint. No extra colors, pane layouts, or key legends.
+- Config names (`issue`, `short-giraffe`) are a file format and never change; the TUI shows `label()`s beside them (Current issue, Short Giraffe). Rename a label, not a name.
 - Logs put dynamic values in `<angle brackets>`. Comments say why.
 
 ## Verifying against real agents
@@ -77,7 +78,7 @@ Never hand-edit a real agent config in tests or experiments. Use one of these:
 - `just sandbox <agents…>` for install and uninstall. Every path derives from `HOME`.
 - Project-local plugins in a scratch git repo: `.amp/plugins/`, `.pi/extensions/`.
 
-Before trusting a new agent's docs, record a real payload: run it once, then read `~/.cache/statusmaxxx/payloads/<agent>.json`.
+Before trusting a new agent's docs, record a real payload: run it once, then read `~/.cache/statusmaxxx/payloads/<agent>.json`. `render` rewrites that file on every call, so piping test JSON into it replaces the recorded session; copy the file first when you need it.
 
 | | Verified live | From docs only |
 |---|---|---|
@@ -100,7 +101,7 @@ TUI changes: `just qa` drives every screen with tuistory in a sandbox and writes
 
 ## Tracking
 
-No tracker. Commit on the current branch (`main`) at a ship boundary. Use a worktree only when I ask. There is no remote yet; once `origin` exists, run plain `git push` after each ship commit. No PRs.
+No tracker. Commit on the current branch (`main`) at a ship boundary. Use a worktree only when I ask. There is no remote yet (it will be `github.com/kumamaki/statusmaxxx`); once `origin` exists, run plain `git push` after each ship commit, and `just release` can push its tag. No PRs.
 
 ## Release
 
