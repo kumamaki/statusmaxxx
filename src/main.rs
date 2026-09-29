@@ -123,7 +123,7 @@ fn main() -> Result<()> {
         Command::Config => tui::run(),
         Command::Render { host } => render(host),
         Command::Install { hosts } => each_host(&hosts, |host, config| host.install(config)),
-        Command::Uninstall { hosts } => each_host(&hosts, |host, _| host.uninstall()),
+        Command::Uninstall { hosts } => each_host(&hosts, |host, config| host.uninstall(config)),
         Command::Status => status(),
         Command::Hook { event: HookEvent::SessionStart { host } } => session_start(host),
         Command::Issue { command } => issue(command),
@@ -133,15 +133,36 @@ fn main() -> Result<()> {
 
 fn render(host: Host) -> Result<()> {
     let input = read_stdin()?;
-    let mut session = Payload::parse(&input)?.into_session()?;
+    // A bad payload or config degrades to defaults and reports itself in the
+    // line — failures show as `✗`, never as a blank status line.
+    let mut problems = Vec::new();
+    let mut session = match Payload::parse(&input).and_then(Payload::into_session) {
+        Ok(session) => session,
+        Err(error) => {
+            eprintln!("[statusmaxxx] {error:#}");
+            problems.push("payload".to_string());
+            Payload::default().into_session()?
+        }
+    };
     // The agent's own registry names the session as peers see it; that name
     // beats the title the payload carries.
     session.session_name = session.session_id.as_deref().and_then(|id| host.session_name(id)).or(session.session_name);
     if !input.trim().is_empty() {
         // The TUI previews each agent with the last session it really sent.
-        paths::write_atomically(&paths::last_payload(host)?, &input)?;
+        let path = paths::last_payload(host)?;
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(input.as_str()) {
+            paths::write_atomically(&path, &input)?;
+        }
     }
-    let line = render::render(host, &Config::load()?, &session);
+    let config = match Config::load() {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("[statusmaxxx] {error:#}");
+            problems.push("config".to_string());
+            Config::default()
+        }
+    };
+    let line = render::render(host, &config, &session, &problems);
     let mut stdout = io::stdout().lock();
     writeln!(stdout, "{line}")?;
     stdout.flush().context("Cannot write the status line")
@@ -180,19 +201,26 @@ fn each_host(hosts: &[Host], action: impl Fn(Host, &Config) -> Result<Vec<String
 fn status() -> Result<()> {
     let config = Config::load()?;
     for host in Host::ALL {
-        let state = if !host.detected()? {
-            "not detected".to_string()
-        } else {
-            match host.state(&config)? {
-                InstallState::Installed => "installed".to_string(),
-                InstallState::NotInstalled => "not installed".to_string(),
-                InstallState::Occupied(other) => format!("not installed; current: {other}"),
-            }
-        };
-        println!("{:<14} {state}", host.label());
+        println!("{:<14} {}", host.label(), state_of(host, &config));
     }
     println!("\nConfig: {}", paths::display(&paths::config_file()?));
     Ok(())
+}
+
+/// One host's install state. A failure reads as `error: …` in place instead of
+/// hiding every other host's state behind the first problem.
+fn state_of(host: Host, config: &Config) -> String {
+    match host.detected() {
+        Ok(false) => return "not detected".to_string(),
+        Err(error) => return format!("error: {error:#}"),
+        Ok(true) => {}
+    }
+    match host.state(config) {
+        Ok(InstallState::Installed) => "installed".to_string(),
+        Ok(InstallState::NotInstalled) => "not installed".to_string(),
+        Ok(InstallState::Occupied(other)) => format!("not installed; current: {other}"),
+        Err(error) => format!("error: {error:#}"),
+    }
 }
 
 /// The marker lives in this checkout's own git dir, so `at` — not `discover` —
@@ -238,9 +266,17 @@ fn issue(command: IssueCommand) -> Result<()> {
         IssueCommand::Clear { id: None } => issues.clear(),
         IssueCommand::Show => {
             for issue in &issues.list {
-                let details: Vec<&str> =
-                    [&issue.title, &issue.state, &issue.url].into_iter().flatten().map(String::as_str).collect();
-                println!("{}  {}", issue.id, details.join(" · "));
+                let details = [&issue.title, &issue.state, &issue.url]
+                    .into_iter()
+                    .flatten()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                if details.is_empty() {
+                    println!("{}", issue.id);
+                } else {
+                    println!("{}  {details}", issue.id);
+                }
             }
             return Ok(());
         }

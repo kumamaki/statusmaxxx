@@ -15,18 +15,19 @@ pub fn home() -> Result<PathBuf> {
 // XDG-style locations on every platform: agents keep their own configs under
 // `~/.config` too, and `~/Library/Application Support` would hide ours.
 pub fn config_dir() -> Result<PathBuf> {
-    Ok(xdg_dir("XDG_CONFIG_HOME", ".config")?.join(APP))
+    Ok(env_or_home("XDG_CONFIG_HOME", ".config")?.join(APP))
 }
 
 pub fn cache_dir() -> Result<PathBuf> {
-    Ok(xdg_dir("XDG_CACHE_HOME", ".cache")?.join(APP))
+    Ok(env_or_home("XDG_CACHE_HOME", ".cache")?.join(APP))
 }
 
 pub fn xdg_config_home() -> Result<PathBuf> {
-    xdg_dir("XDG_CONFIG_HOME", ".config")
+    env_or_home("XDG_CONFIG_HOME", ".config")
 }
 
-fn xdg_dir(variable: &str, fallback: &str) -> Result<PathBuf> {
+/// `variable` set to a non-empty value wins; otherwise `~/<fallback>`.
+pub fn env_or_home(variable: &str, fallback: &str) -> Result<PathBuf> {
     match env::var_os(variable) {
         Some(value) if !value.is_empty() => Ok(PathBuf::from(value)),
         _ => Ok(home()?.join(fallback)),

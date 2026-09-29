@@ -108,7 +108,7 @@ TUI changes: `just qa` drives every screen with tuistory in a sandbox and writes
 
 ## Tracking
 
-No tracker. Commit on the current branch (`main`) at a ship boundary. Use a worktree only when I ask. There is no remote yet (it will be `github.com/kumamaki/statusmaxxx`); once `origin` exists, run plain `git push` after each ship commit, and `just release` can push its tag. No PRs.
+No tracker. Commit on the current branch (`main`) at a ship boundary, then run plain `git push` — `origin` is `personal:kumamaki/statusmaxxx` (`github.com/kumamaki/statusmaxxx`). `just release` pushes its tag. Use a worktree only when I ask. No PRs.
 
 ## Release
 

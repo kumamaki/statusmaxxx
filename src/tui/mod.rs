@@ -342,7 +342,7 @@ impl App {
     }
 
     fn apply(&mut self, host: Host, install: bool) {
-        let outcome = if install { host.install(&self.config) } else { host.uninstall() };
+        let outcome = if install { host.install(&self.config) } else { host.uninstall(&self.config) };
         self.notice = match outcome {
             Ok(lines) if lines.is_empty() => vec![Line::from(card::muted("Nothing to change"))],
             Ok(lines) => {

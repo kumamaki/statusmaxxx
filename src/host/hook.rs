@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use super::Host;
-use super::settings::JsonSettings;
+use super::settings::{JsonSettings, backup_path};
 use super::wrapper::Wrapper;
 use crate::paths;
 
@@ -101,8 +101,13 @@ pub fn uninstall(host: Host) -> Result<Vec<String>> {
                     settings.set(key, Value::Array(entries))?;
                 }
                 report.push(format!("Removed the session-start hook from <{}>", paths::display(settings.path())));
-                // Cursor's hooks.json is left holding only its schema version once our hook is gone.
-                if matches!(shape, EntryShape::Cursor) && settings.keys().all(|key| key == "version") {
+                // Cursor's hooks.json is left holding only its schema version once our
+                // hook is gone — delete it when we created it. A missing backup proves
+                // it: `save` only backs up a file that was already there.
+                if matches!(shape, EntryShape::Cursor)
+                    && settings.keys().all(|key| key == "version")
+                    && !backup_path(settings.path()).exists()
+                {
                     settings.delete()?;
                 } else {
                     settings.save()?;

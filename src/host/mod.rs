@@ -181,15 +181,15 @@ impl Host {
     /// The agent's config home; its existence is how we detect the agent.
     pub fn home(self) -> Result<PathBuf> {
         match self {
-            Host::Claude => overridable_home("CLAUDE_CONFIG_DIR", ".claude"),
+            Host::Claude => paths::env_or_home("CLAUDE_CONFIG_DIR", ".claude"),
             Host::Cursor => Ok(paths::home()?.join(".cursor")),
             Host::Qwen => Ok(paths::home()?.join(".qwen")),
             Host::Droid => Ok(paths::home()?.join(".factory")),
-            Host::Copilot => overridable_home("COPILOT_HOME", ".copilot"),
+            Host::Copilot => paths::env_or_home("COPILOT_HOME", ".copilot"),
             Host::Amp => Ok(paths::xdg_config_home()?.join("amp")),
             Host::Pi => Ok(paths::home()?.join(".pi").join("agent")),
             Host::Opencode => Ok(paths::xdg_config_home()?.join("opencode")),
-            Host::Codex => overridable_home("CODEX_HOME", ".codex"),
+            Host::Codex => paths::env_or_home("CODEX_HOME", ".codex"),
             Host::Gemini => Ok(paths::home()?.join(".gemini")),
         }
     }
@@ -228,11 +228,12 @@ impl Host {
         }
     }
 
-    pub fn uninstall(self) -> Result<Vec<String>> {
+    /// `config` tells built-in agents whether their current items are ours to remove.
+    pub fn uninstall(self, config: &Config) -> Result<Vec<String>> {
         let mut report = match self.tier() {
             Tier::Command => command::uninstall(self)?,
             Tier::Plugin => plugin::uninstall(self)?,
-            Tier::BuiltIn => builtin::uninstall(self)?,
+            Tier::BuiltIn => builtin::uninstall(self, config)?,
         };
         report.extend(hook::uninstall(self)?);
         report.extend(instructions::uninstall(self)?);
@@ -243,13 +244,6 @@ impl Host {
 impl fmt::Display for Host {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.id())
-    }
-}
-
-fn overridable_home(variable: &str, default: &str) -> Result<PathBuf> {
-    match std::env::var_os(variable) {
-        Some(value) if !value.is_empty() => Ok(PathBuf::from(value)),
-        _ => Ok(paths::home()?.join(default)),
     }
 }
 

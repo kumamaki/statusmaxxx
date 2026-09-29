@@ -1447,7 +1447,6 @@ dependencies = [
  "clap",
  "dirs",
  "ratatui",
- "regex",
  "serde",
  "serde_json",
  "tempfile",

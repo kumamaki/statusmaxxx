@@ -56,21 +56,28 @@ pub fn install(host: Host, config: &Config) -> Result<Vec<String>> {
 /// the new items when it wrote them.
 pub fn sync(host: Host, old: &Config, new: &Config) -> Result<Option<Vec<&'static str>>> {
     let (before, after) = (items(host, old), items(host, new));
+    if before == after {
+        return Ok(None);
+    }
     let ours = current(host)?.is_some_and(|current| current.iter().eq(before.iter()));
-    if before == after || !ours {
+    if !ours {
         return Ok(None);
     }
     write(host, Some(after.iter().map(|item| item.to_string()).collect()))?;
     Ok(Some(after))
 }
 
-/// Puts back the items we replaced, or the agent's defaults when there were none.
-pub fn uninstall(host: Host) -> Result<Vec<String>> {
+/// Puts back the items we replaced, or the agent's defaults when there were
+/// none — but only while the items are still ours; a list the user set since
+/// install is theirs to keep.
+pub fn uninstall(host: Host, config: &Config) -> Result<Vec<String>> {
+    let installed = state(host, config)? == InstallState::Installed;
+    // Taken even when not installed: the record is stale once the user took over.
     let previous = replaced::take(host)?;
-    let restored = previous.map(serde_json::from_value).transpose().context("Recorded items are corrupt")?;
-    if restored.is_none() && current(host)?.is_none() {
+    if !installed {
         return Ok(vec![]);
     }
+    let restored = previous.map(serde_json::from_value).transpose().context("Recorded items are corrupt")?;
     write(host, restored)
 }
 
