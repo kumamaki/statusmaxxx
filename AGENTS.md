@@ -89,6 +89,8 @@ Before trusting a new agent's docs, record a real payload: run it once, then rea
 | Session-start hook | Claude Code (`claude -p --settings`), Droid (`droid exec --settings`), Cursor (project `.cursor/hooks.json`, `agent -p --trust`) | Qwen, Copilot |
 | Same `session_id` in hook and status line | Cursor | Claude Code, Droid (their status lines carry it; the hook side is from docs), Qwen, Copilot |
 
+Claude's messaging session name (`pulli-04`, what `ListAgents` shows) lives in `~/.claude/sessions/<pid>.json`, keyed by `sessionId`; Claude re-derives it on resume, so the freshest `updatedAt` wins. `render` reads it from there — agents never have to report it.
+
 Check a hook live by asking the agent, one-shot, to quote any context line that starts with `statusmaxxx:`.
 
 ANSI in status areas, checked with tuistory: pi renders colors and passes OSC 8 links through, Amp prints escapes literally, Droid renders colors but strips links. `Output` follows that. Check links by recording the agent's raw output with `script` and grepping for `]8;;`.

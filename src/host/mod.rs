@@ -8,6 +8,7 @@ mod command;
 pub mod hook;
 mod instructions;
 mod plugin;
+mod registry;
 mod replaced;
 pub mod settings;
 mod wrapper;
@@ -165,6 +166,15 @@ impl Host {
             }
             // Copilot's payload is undocumented; its maintainers say it carries cost.
             Segment::Cost => matches!(self, Host::Claude | Host::Copilot),
+        }
+    }
+
+    /// The session's name in the agent's own registry, when it keeps one.
+    /// Claude's registry holds the messaging name other sessions reach it by.
+    pub fn session_name(self, session_id: &str) -> Option<String> {
+        match self {
+            Host::Claude => registry::name(&self.home().ok()?.join("sessions"), session_id),
+            _ => None,
         }
     }
 

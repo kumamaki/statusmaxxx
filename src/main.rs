@@ -114,7 +114,10 @@ fn main() -> Result<()> {
 
 fn render(host: Host) -> Result<()> {
     let input = read_stdin()?;
-    let session = Payload::parse(&input)?.into_session()?;
+    let mut session = Payload::parse(&input)?.into_session()?;
+    // The agent's own registry names the session as peers see it; that name
+    // beats the title the payload carries.
+    session.session_name = session.session_id.as_deref().and_then(|id| host.session_name(id)).or(session.session_name);
     if !input.trim().is_empty() {
         // The TUI previews each agent with the last session it really sent.
         paths::write_atomically(&paths::last_payload(host)?, &input)?;

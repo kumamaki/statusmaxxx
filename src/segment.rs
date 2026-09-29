@@ -77,7 +77,7 @@ impl Segment {
             Segment::Branch => "Current branch, or the commit when detached",
             Segment::Changes => "Changed files, or a check when the tree is clean",
             Segment::Issue => "Issues the agent set with `statusmaxxx issue set`",
-            Segment::Session => "Session name the agent reports, or the short id",
+            Segment::Session => "Session's name, or the short id",
             Segment::Model => "Model the agent reports",
             Segment::Context => "Context window used",
             Segment::Cost => "Session cost the agent reports",

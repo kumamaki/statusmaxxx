@@ -119,7 +119,7 @@ separator = " · "           # any text; the TUI offers "  ", " · ", " │ ", "
 segments = ["worktree", "branch", "issue"]
 ```
 
-Segments: `directory`, `worktree`, `branch`, `changes`, `issue`, `session`, `model`, `context`, `cost`. `git` also works and means `branch` and `changes`. `session` shows the session's name when the agent sends one (Claude Code titles its sessions), else the first eight characters of the session id; every agent but Codex and Gemini sends one — Amp sends its thread id. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
+Segments: `directory`, `worktree`, `branch`, `changes`, `issue`, `session`, `model`, `context`, `cost`. `git` also works and means `branch` and `changes`. `session` shows the session's name — Claude Code's is the messaging name other sessions reach it by (`pulli-04`), read from `~/.claude/sessions`; pi sends its own — else the first eight characters of the session id. Codex and Gemini are the only agents without a session to show. When an agent does not send something (Droid has no cost, for example), that segment stays empty.
 
 ## Debugging
 
