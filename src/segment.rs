@@ -327,9 +327,12 @@ const MODEL_ICONS: &[(&str, &str)] = &[
     ("copilot", "\u{ec1e}"), // copilot
     ("swe", "\u{f121}"),     // code brackets, the software engineer
     ("devin", "\u{f121}"),
-    ("glm", "\u{f075}"),   // chat bubble, ChatGLM's mark
-    ("llama", "\u{edfe}"), // Meta's loop
-    ("phi", "\u{f0372}"),  // Microsoft's panes
+    ("glm", "\u{f075}"),     // chat bubble, ChatGLM's mark
+    ("llama", "\u{edfe}"),   // Meta's loop
+    ("phi", "\u{f0372}"),    // Microsoft's panes
+    ("qwen", "\u{f1331}"),   // a CJK ideogram
+    ("cohere", "\u{f0564}"), // two shapes joined
+    ("minimax", "\u{ed63}"), // chess knight — the game-tree algorithm
 ];
 
 fn model_icon(model: &str) -> &'static str {
@@ -414,7 +417,9 @@ mod tests {
         assert_eq!(model_icon("Sonnet 5.5"), "\u{f219}");
         assert_eq!(model_icon("gpt-5.1-codex"), "\u{f00bd}");
         assert_eq!(model_icon("[Devin] SWE 2"), "\u{f121}");
-        assert_eq!(model_icon("qwen3-coder"), Segment::Model.icon());
+        assert_eq!(model_icon("qwen3-coder"), "\u{f1331}");
+        assert_eq!(model_icon("MiniMax-M2"), "\u{ed63}");
+        assert_eq!(model_icon("some-future-model"), Segment::Model.icon());
     }
 
     #[test]
