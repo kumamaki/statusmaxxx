@@ -3,6 +3,8 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
+use crate::worktree;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Repo {
     pub root: PathBuf,
@@ -11,6 +13,8 @@ pub struct Repo {
     pub name: String,
     /// Folder name of a linked worktree; `None` in the main checkout.
     pub worktree: Option<String>,
+    /// The path the agent declared it works in, when discovery followed it here.
+    pub declared: Option<PathBuf>,
     pub head: Head,
     pub changed_files: usize,
 }
@@ -22,11 +26,35 @@ pub enum Head {
 }
 
 impl Repo {
+    /// The repository `cwd` belongs to — or the worktree the agent declared it
+    /// works in, which redirects the whole repository context there.
     /// `Ok(None)` outside a repository; any other git failure is an error.
     pub fn discover(cwd: &Path) -> Result<Option<Self>> {
         let Some(layout) = Layout::read(cwd)? else {
             return Ok(None);
         };
+        // A declaration whose target is gone is stale state, not an error:
+        // `git worktree remove` does not clean our marker up.
+        if let Some(declared) =
+            worktree::declared(&layout.git_dir)?.filter(|path| *path != layout.root && path.is_dir())
+            && let Some(repo) = Self::at(&declared)?
+        {
+            return Ok(Some(Self { declared: Some(declared), ..repo }));
+        }
+        Self::assemble(layout)
+    }
+
+    /// The repository `path` belongs to, without the declared-worktree redirect.
+    /// `worktree set` writes through this — the marker belongs to the checkout
+    /// the agent runs in, not the one it points at.
+    pub fn at(path: &Path) -> Result<Option<Self>> {
+        let Some(layout) = Layout::read(path)? else {
+            return Ok(None);
+        };
+        Self::assemble(layout)
+    }
+
+    fn assemble(layout: Layout) -> Result<Option<Self>> {
         let status = git(&layout.root, &["status", "--porcelain=v2", "--branch"])?;
         let (head, changed_files) = parse_status(&status)?;
         let worktree = (layout.git_dir != layout.common_dir).then(|| folder_name(&layout.root));
@@ -35,6 +63,7 @@ impl Repo {
             root: layout.root,
             git_dir: layout.git_dir,
             worktree,
+            declared: None,
             head,
             changed_files,
         }))
@@ -136,5 +165,42 @@ mod tests {
     fn names_repositories_from_their_common_dir() {
         assert_eq!(repository_name(Path::new("/src/app/.git")), "app");
         assert_eq!(repository_name(Path::new("/src/app.git")), "app");
+    }
+
+    /// `git` run in `cwd`, panicking on failure — the fixture owns these repos.
+    fn run_git(cwd: &Path, args: &[&str]) {
+        let output = Command::new("git").arg("-C").arg(cwd).args(args).output().unwrap();
+        assert!(output.status.success(), "git {} failed: {}", args.join(" "), String::from_utf8_lossy(&output.stderr));
+    }
+
+    #[test]
+    fn a_declared_worktree_redirects_until_cleared_or_gone() {
+        let temp = tempfile::tempdir().unwrap();
+        let main = temp.path().join("main");
+        run_git(temp.path(), &["init", "-q", "main"]);
+        run_git(&main, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"]);
+        let linked = temp.path().join("linked");
+        run_git(&main, &["worktree", "add", "-q", "-b", "linked", linked.to_str().unwrap()]);
+        let main = std::fs::canonicalize(&main).unwrap();
+        let linked = std::fs::canonicalize(&linked).unwrap();
+
+        let local = Repo::discover(&main).unwrap().unwrap();
+        assert_eq!(local.worktree, None);
+        assert_eq!(local.declared, None);
+
+        worktree::set(&local.git_dir, &linked).unwrap();
+        let followed = Repo::discover(&main).unwrap().unwrap();
+        assert_eq!(followed.worktree.as_deref(), Some("linked"));
+        assert_eq!(followed.declared.as_deref(), Some(linked.as_path()));
+
+        worktree::clear(&local.git_dir).unwrap();
+        assert_eq!(Repo::discover(&main).unwrap().unwrap().declared, None);
+
+        // Removing the target leaves a stale marker; the checkout's own repo wins.
+        worktree::set(&local.git_dir, &linked).unwrap();
+        std::fs::remove_dir_all(&linked).unwrap();
+        let fallen_back = Repo::discover(&main).unwrap().unwrap();
+        assert_eq!(fallen_back.worktree, None);
+        assert_eq!(fallen_back.declared, None);
     }
 }

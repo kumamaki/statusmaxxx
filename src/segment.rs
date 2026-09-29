@@ -320,6 +320,7 @@ mod tests {
             git_dir: PathBuf::from("/work/app/.git"),
             name: "app".into(),
             worktree: worktree.map(str::to_string),
+            declared: None,
             head: Head::Branch("main".into()),
             changed_files: 0,
         }

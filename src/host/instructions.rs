@@ -1,5 +1,5 @@
-//! Tells plugin agents to set the issue they work on, through a marked block in
-//! their global instructions.
+//! Tells plugin agents to set the issue they work on and the worktree their
+//! work happens in, through a marked block in their global instructions.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 use super::Host;
-use crate::issue::HOW_TO;
+use crate::issue;
 use crate::paths;
+use crate::worktree;
 
 const BEGIN: &str = "<!-- statusmaxxx:begin -->";
 const END: &str = "<!-- statusmaxxx:end -->";
@@ -27,7 +28,7 @@ pub fn install(host: Host) -> Result<Vec<String>> {
         return Ok(vec![]);
     };
     paths::write_file(&path, &with_block(&read(&path)?)?)?;
-    Ok(vec![format!("Wrote the issue instruction to <{}>", paths::display(&path))])
+    Ok(vec![format!("Wrote the status line instructions to <{}>", paths::display(&path))])
 }
 
 pub fn uninstall(host: Host) -> Result<Vec<String>> {
@@ -42,7 +43,7 @@ pub fn uninstall(host: Host) -> Result<Vec<String>> {
     } else {
         paths::write_file(&path, &remaining)?;
     }
-    Ok(vec![format!("Removed the issue instruction from <{}>", paths::display(&path))])
+    Ok(vec![format!("Removed the status line instructions from <{}>", paths::display(&path))])
 }
 
 fn read(path: &Path) -> Result<String> {
@@ -54,7 +55,7 @@ fn read(path: &Path) -> Result<String> {
 }
 
 fn block() -> String {
-    format!("{BEGIN}\n## Status line issue\n\n{HOW_TO}\n{END}\n")
+    format!("{BEGIN}\n## Status line\n\n{}\n\n{}\n{END}\n", issue::HOW_TO, worktree::HOW_TO)
 }
 
 /// Replaces our block, or appends it after a blank line.

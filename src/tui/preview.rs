@@ -36,6 +36,7 @@ pub fn sample() -> Sample {
             root,
             name: "shop".into(),
             worktree: Some("auth".into()),
+            declared: None,
             head: Head::Branch("eng-42".into()),
             changed_files: 3,
         },

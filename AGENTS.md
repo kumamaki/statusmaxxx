@@ -10,10 +10,11 @@ One Rust binary that renders a single status line for many coding agents and wir
 
 ```
 src/
-  main.rs          CLI: config (TUI, default), render, install, uninstall, status, hook, issue
+  main.rs          CLI: config (TUI, default), render, install, uninstall, status, hook, issue, worktree
   payload.rs       stdin JSON (Claude Code shape, plus Droid's and Cursor's) → Session
-  git.rs           repo name, linked worktree, git dir, head, changed files
+  git.rs           repo name, linked worktree, git dir, head, changed files; discover follows the declared worktree
   issue.rs         issues the agent set, stored in the worktree's git dir
+  worktree.rs      the worktree the agent says it works in, stored in the session checkout's git dir
   segment.rs       Segment → Pieces (text + Role + url)
   render.rs        Pieces → ANSI line, or {"text","url"} JSON for plugin shims
   theme.rs         Role → color per theme
@@ -30,7 +31,7 @@ src/
     command.rs     statusLine-command agents: Claude, Cursor, Qwen, Droid, Copilot
     plugin.rs      shim agents: Amp, pi, OpenCode; sources in shims/
     builtin.rs     item-only agents: Codex, Gemini (segment → item id, kept in sync with the config)
-    hook.rs        session-start hook: tells command agents which issue the worktree shows
+    hook.rs        session-start hook: tells command agents which worktree and issue the line shows
     instructions.rs  the same message as a marked AGENTS.md block, for plugin agents
     wrapper.rs     scripts agents run instead of `statusmaxxx …` command lines
     settings.rs    JSON settings editing with backup; refuses JSONC

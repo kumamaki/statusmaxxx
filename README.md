@@ -34,7 +34,7 @@ statusmaxxx status
 statusmaxxx uninstall amp
 ```
 
-`install` saves whatever status line it replaces, and `uninstall` puts it back. Every settings file it edits also gets a `<file>.statusmaxxx.bak` copy. `install` also tells the agent to keep its issue current (see [Issues](#issues)), and `uninstall` removes that too. Start a new agent session after installing.
+`install` saves whatever status line it replaces, and `uninstall` puts it back. Every settings file it edits also gets a `<file>.statusmaxxx.bak` copy. `install` also tells the agent to keep its issue and worktree current (see [Issues](#issues)), and `uninstall` removes that too. Start a new agent session after installing.
 
 ## TUI
 
@@ -103,7 +103,19 @@ Issues are kept per worktree, in that worktree's own git dir. They survive resta
 | Copilot CLI | `sessionStart` hook in `~/.copilot/hooks/statusmaxxx.json` |
 | Amp, pi, OpenCode | marked block in their global `AGENTS.md` |
 
-The hook runs at startup, on resume, and after compaction. It tells the agent what this worktree shows (`ENG-42 "Fix auth" (In Progress)`), or that nothing is set, and how to update it. Try it with `echo '{"cwd":"'$PWD'"}' | statusmaxxx hook session-start --host claude`.
+The hook runs at startup, on resume, and after compaction. It tells the agent which worktree the line follows, what this worktree shows (`ENG-42 "Fix auth" (In Progress)`), or that nothing is set, and how to update it. Try it with `echo '{"cwd":"'$PWD'"}' | statusmaxxx hook session-start --host claude`.
+
+## Worktrees
+
+The line reads the checkout the agent runs in. An agent that stays in the main checkout while it works in a linked worktree — `git worktree add`, and no `cd` — can point the line at where the work is:
+
+```sh
+statusmaxxx worktree set ../app.fix-eng-42   # worktree, branch, changes, and issue all follow
+statusmaxxx worktree show
+statusmaxxx worktree clear                   # the work landed; back to this checkout
+```
+
+The declaration lives in the session checkout's own git dir, like the issue list, so each checkout follows its own worktree and nothing shows up in `git status`. A declaration whose worktree is gone is ignored — the line falls back to the checkout's repository.
 
 ## Config
 

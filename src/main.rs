@@ -9,8 +9,10 @@ mod segment;
 mod separator;
 mod theme;
 mod tui;
+mod worktree;
 
 use std::io::{self, IsTerminal, Read, Write};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
@@ -60,6 +62,12 @@ enum Command {
         #[command(subcommand)]
         command: IssueCommand,
     },
+    /// The worktree repository segments follow. Agents set it when their work
+    /// happens in another checkout than the one they run in.
+    Worktree {
+        #[command(subcommand)]
+        command: WorktreeCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -69,6 +77,16 @@ enum HookEvent {
         #[arg(long)]
         host: Host,
     },
+}
+
+#[derive(Subcommand)]
+enum WorktreeCommand {
+    /// Follow the repository at <path>; every repository segment shows it.
+    Set { path: PathBuf },
+    /// Follow this checkout's own repository again.
+    Clear,
+    /// Print the worktree the line follows.
+    Show,
 }
 
 #[derive(Subcommand)]
@@ -109,6 +127,7 @@ fn main() -> Result<()> {
         Command::Status => status(),
         Command::Hook { event: HookEvent::SessionStart { host } } => session_start(host),
         Command::Issue { command } => issue(command),
+        Command::Worktree { command } => worktree(command),
     }
 }
 
@@ -137,13 +156,13 @@ fn read_stdin() -> Result<String> {
     Ok(input)
 }
 
-/// Outside a repository there is no worktree issue to talk about, so it prints nothing.
+/// Outside a repository there is no worktree context to talk about, so it prints nothing.
 fn session_start(host: Host) -> Result<()> {
     let session = Payload::parse(&read_stdin()?)?.into_session()?;
     let Some(repo) = Repo::discover(&session.cwd)? else {
         return Ok(());
     };
-    let briefing = Issues::of(&repo)?.briefing();
+    let briefing = format!("{} {}", worktree::briefing(repo.declared.as_deref()), Issues::of(&repo)?.briefing());
     println!("{}", host::hook::output(host, &briefing));
     Ok(())
 }
@@ -174,6 +193,36 @@ fn status() -> Result<()> {
     }
     println!("\nConfig: {}", paths::display(&paths::config_file()?));
     Ok(())
+}
+
+/// The marker lives in this checkout's own git dir, so `at` — not `discover` —
+/// finds it even when a declared worktree already redirects the context.
+fn worktree(command: WorktreeCommand) -> Result<()> {
+    let cwd = std::env::current_dir().context("Cannot resolve the working directory")?;
+    let Some(repo) = Repo::at(&cwd)? else {
+        bail!("The status line follows the checkout the agent runs in, and <{}> is not in a repository", cwd.display());
+    };
+    match command {
+        WorktreeCommand::Set { path } => {
+            // Canonicalized so the marker holds the real path, not the spelling typed.
+            let path = cwd.join(&path);
+            let path = std::fs::canonicalize(&path).with_context(|| format!("Cannot resolve <{}>", path.display()))?;
+            if path == repo.root {
+                bail!("<{}> is this checkout — nothing to follow", paths::display(&path));
+            }
+            if Repo::at(&path)?.is_none() {
+                bail!("<{}> is not in a git repository", paths::display(&path));
+            }
+            worktree::set(&repo.git_dir, &path)
+        }
+        WorktreeCommand::Clear => worktree::clear(&repo.git_dir),
+        WorktreeCommand::Show => {
+            if let Some(path) = worktree::declared(&repo.git_dir)? {
+                println!("{}", paths::display(&path));
+            }
+            Ok(())
+        }
+    }
 }
 
 fn issue(command: IssueCommand) -> Result<()> {
