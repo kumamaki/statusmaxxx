@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use crate::paths;
 
 /// How an agent points the status line at its worktree. Agents read it at session start.
-pub const HOW_TO: &str = "When your work happens in a linked worktree while the session stays in another checkout, run `statusmaxxx worktree set <worktree path>` so the status line follows it. When the work lands, run `statusmaxxx worktree clear`.";
+pub const HOW_TO: &str = "When your work happens in a linked worktree, run `statusmaxxx worktree set <path>` so the line follows it; `statusmaxxx worktree clear` when the work lands.";
 
 /// Beside `issues.json` in the checkout's own git dir: never committed, and
 /// each linked worktree keeps its own declaration.
