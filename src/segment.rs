@@ -305,15 +305,40 @@ fn session_label(session: &Session) -> Option<String> {
     session.session_id.as_deref().map(|id| id.get(..8).unwrap_or(id).to_string())
 }
 
-/// Claude's tiers get their own glyphs; every other model keeps the segment's icon.
+/// Model-name needles → their glyphs, checked in order so a compound name like
+/// `gpt-5.1-codex` takes the book rather than the OpenAI knot. Anything that
+/// matches none keeps the segment's own icon.
+const MODEL_ICONS: &[(&str, &str)] = &[
+    ("opus", "\u{f4f5}"),      // north star
+    ("sonnet", "\u{f219}"),    // diamond
+    ("haiku", "\u{f06c}"),     // leaf
+    ("fable", "\u{f06d3}"),    // quill
+    ("mythos", "\u{ef0d}"),    // scroll
+    ("claude", "\u{f069}"),    // Anthropic's starburst
+    ("codex", "\u{f00bd}"),    // bound book
+    ("gpt", "\u{ec81}"),       // OpenAI knot
+    ("gemini", "\u{f0ae2}"),   // four-point sparkle
+    ("grok", "\u{f0b05}"),     // xAI's X
+    ("deepseek", "\u{f18b4}"), // whale
+    ("codestral", "\u{ef16}"), // wind
+    ("mistral", "\u{ef16}"),   // wind
+    ("kimi", "\u{f186}"),      // moon
+    ("moonshot", "\u{f186}"),
+    ("copilot", "\u{ec1e}"), // copilot
+    ("swe", "\u{f121}"),     // code brackets, the software engineer
+    ("devin", "\u{f121}"),
+    ("glm", "\u{f075}"),   // chat bubble, ChatGLM's mark
+    ("llama", "\u{edfe}"), // Meta's loop
+    ("phi", "\u{f0372}"),  // Microsoft's panes
+];
+
 fn model_icon(model: &str) -> &'static str {
     let name = model.to_lowercase();
-    match name {
-        _ if name.contains("opus") => "\u{f4f5}",
-        _ if name.contains("sonnet") => "\u{f219}",
-        _ if name.contains("haiku") => "\u{f06c}",
-        _ => Segment::Model.icon(),
-    }
+    MODEL_ICONS
+        .iter()
+        .find(|(needle, _)| name.contains(needle))
+        .map(|(_, icon)| *icon)
+        .unwrap_or_else(|| Segment::Model.icon())
 }
 
 fn first_words(text: &str, count: usize) -> String {
@@ -382,6 +407,14 @@ mod tests {
         let titled = session(None, Some("Claude sessions messaging each other"));
         assert_eq!(session_label(&titled).as_deref(), Some("Claude sessions messaging each…"));
         assert_eq!(session_label(&session(None, None)), None);
+    }
+
+    #[test]
+    fn model_icons_match_families_and_compound_names_take_the_specific_one() {
+        assert_eq!(model_icon("Sonnet 5.5"), "\u{f219}");
+        assert_eq!(model_icon("gpt-5.1-codex"), "\u{f00bd}");
+        assert_eq!(model_icon("[Devin] SWE 2"), "\u{f121}");
+        assert_eq!(model_icon("qwen3-coder"), Segment::Model.icon());
     }
 
     #[test]
