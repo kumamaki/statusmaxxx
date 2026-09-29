@@ -216,9 +216,11 @@ impl Segment {
                 .map(|label| Piece::new(Role::Muted, sources.label(self, &label)))
                 .into_iter()
                 .collect(),
-            Segment::Model => {
-                session.model.iter().map(|model| Piece::new(Role::Model, sources.label(self, model))).collect()
-            }
+            Segment::Model => session
+                .model
+                .iter()
+                .map(|model| Piece::new(Role::Model, sources.labeled(self, model_icon(model), model)))
+                .collect(),
             Segment::Context => session
                 .context_used_percent
                 .map(|percent| {
@@ -301,6 +303,17 @@ fn session_label(session: &Session) -> Option<String> {
         return Some(first_words(name, TITLE_WORDS));
     }
     session.session_id.as_deref().map(|id| id.get(..8).unwrap_or(id).to_string())
+}
+
+/// Claude's tiers get their own glyphs; every other model keeps the segment's icon.
+fn model_icon(model: &str) -> &'static str {
+    let name = model.to_lowercase();
+    match name {
+        _ if name.contains("opus") => "\u{f4f5}",
+        _ if name.contains("sonnet") => "\u{f219}",
+        _ if name.contains("haiku") => "\u{f06c}",
+        _ => Segment::Model.icon(),
+    }
 }
 
 fn first_words(text: &str, count: usize) -> String {
