@@ -78,10 +78,17 @@ fn icon_slot(app: &App, segment: Segment) -> Span<'static> {
 }
 
 /// `◂ shown ▸` on the focused row; the value keeps its column on every row.
-fn shown_stepper(state: Span<'static>, focused: bool) -> Vec<Span<'static>> {
-    let arrow = |glyph: &str| if focused { muted(glyph) } else { Span::raw(" ".repeat(glyph.width())) };
+fn shown_stepper(shown: bool, focused: bool, moving: bool) -> Vec<Span<'static>> {
+    let arrow = |glyph: &str| if focused && !moving { text(glyph) } else { Span::raw(" ".repeat(glyph.width())) };
+    let (state, active) = if moving {
+        ("Moving", true)
+    } else if shown {
+        ("Shown", true)
+    } else {
+        ("Hidden", false)
+    };
     let mut spans = vec![arrow("◂ ")];
-    spans.extend(card::slot(state, "Hidden".width()));
+    spans.extend(card::slot(name_span(state, focused, active), "Hidden".width()));
     spans.push(arrow(" ▸"));
     spans
 }
@@ -164,14 +171,9 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
         if focused {
             focus_line = body.len();
         }
-        let state = match (focused && app.moving, *shown) {
-            (true, _) => focus("Moving"),
-            (false, true) => text("Shown"),
-            (false, false) => muted("Hidden"),
-        };
         let mut name = vec![icon_slot(app, *segment)];
         name.push(name_span(segment.label(), focused, *shown));
-        body.push(spread(name, shown_stepper(state, focused && !app.moving), inner));
+        body.push(spread(name, shown_stepper(*shown, focused, focused && app.moving), inner));
         let description = match host {
             Some(host) if !host.supports(*segment) => format!("{} cannot show this", host.label()),
             Some(_) => segment.description().to_string(),

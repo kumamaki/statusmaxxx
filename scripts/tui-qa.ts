@@ -163,6 +163,10 @@ async function main(): Promise<number> {
     }
     cardChrome(segments, "segments");
     points(segments, "segments-pointer", "\uf07b");
+    // The focused row's stepper paints its value in focus color; other rows stay unlit.
+    const focusedControl = await tui(["snapshot", "--fg", "#ff453a", "--trim"], true);
+    must(focusedControl, "segments-focused-control", "Directory", "Shown");
+    mustNot(focusedControl, "segments-focused-control", "Worktree");
 
     await press("down", "down", "space");
     const hidden = await snapshot("segments-branch-hidden");
