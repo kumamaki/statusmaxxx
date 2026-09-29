@@ -82,7 +82,7 @@ Never hand-edit a real agent config in tests or experiments. Use one of these:
 - `just sandbox <agents…>` for install and uninstall. Every path derives from `HOME`.
 - Project-local plugins in a scratch git repo: `.amp/plugins/`, `.pi/extensions/`.
 
-Before trusting a new agent's docs, record a real payload: run it once, then read `~/.cache/statusmaxxx/payloads/<agent>.json`. `render` rewrites that file on every call — and every live session of that agent writes it, so it races when several run at once. To capture one session's status line input, wrap the command in `tee <file> |`. `hook session-start` records its payload the same way to `<agent>-hook.json`. One-shots (`claude -p`, `droid exec`) fire SessionStart but never the status line; comparing the two sides' `session_id` needs an interactive run (tuistory drives it).
+Before trusting a new agent's docs, record a real payload: run it once, then read `~/.cache/statusmaxxx/payloads/<agent>.json`. Sessions that report a `session_id` also keep their own `<agent>-<session-id>.json` (hooks: `<agent>-<session-id>-hook.json`), so concurrent sessions do not overwrite each other and a session's two sides diff directly. `render` rewrites the latest file on every call, so piping test JSON into it replaces the recorded session; copy the file first when you need it. One-shots (`claude -p`, `droid exec`) fire SessionStart but never the status line, so a status-line capture needs an interactive run (tuistory drives it).
 
 | | Verified live | From docs only |
 |---|---|---|

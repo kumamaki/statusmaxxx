@@ -51,6 +51,28 @@ pub fn last_hook_payload(host: Host) -> Result<PathBuf> {
     Ok(cache_dir()?.join("payloads").join(format!("{}-hook.json", host.id())))
 }
 
+/// One session's own status line payload, so concurrent sessions of one agent
+/// do not overwrite each other; `<host>.json` remains the latest.
+pub fn session_payload(host: Host, session_id: &str) -> Result<PathBuf> {
+    Ok(cache_dir()?.join("payloads").join(format!("{}-{}.json", host.id(), sanitize(session_id))))
+}
+
+/// Its session-start counterpart, so one session's two payloads diff directly.
+pub fn session_hook_payload(host: Host, session_id: &str) -> Result<PathBuf> {
+    Ok(cache_dir()?.join("payloads").join(format!("{}-{}-hook.json", host.id(), sanitize(session_id))))
+}
+
+/// A session id goes into a filename, so only portable characters survive.
+fn sanitize(id: &str) -> String {
+    id.chars()
+        .map(
+            |character| {
+                if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') { character } else { '_' }
+            },
+        )
+        .collect()
+}
+
 /// The path agents should call. Prefers the `PATH` entry over the resolved
 /// executable so package-manager upgrades (versioned cellar paths) keep working.
 pub fn binary() -> Result<PathBuf> {

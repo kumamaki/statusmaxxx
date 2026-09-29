@@ -147,8 +147,12 @@ fn render(host: Host) -> Result<()> {
     // The agent's own registry names the session as peers see it; that name
     // beats the title the payload carries.
     session.session_name = session.session_id.as_deref().and_then(|id| host.session_name(id)).or(session.session_name);
-    // The TUI previews each agent with the last session it really sent.
-    record_payload(paths::last_payload(host)?, &input)?;
+    // Kept for debugging and `just render` replay; a session that carries an id
+    // also records its own file, so concurrent sessions cannot hide each other.
+    record_payload(paths::last_payload(host)?, &input);
+    if let Some(id) = session.session_id.as_deref().filter(|id| !id.is_empty()) {
+        record_payload(paths::session_payload(host, id)?, &input);
+    }
     let config = match Config::load() {
         Ok(config) => config,
         Err(error) => {
@@ -164,12 +168,15 @@ fn render(host: Host) -> Result<()> {
 }
 
 /// The last thing the agent sent on a path, kept for debugging and replay.
-/// Identical refreshes are not rewritten.
-fn record_payload(path: PathBuf, input: &str) -> Result<()> {
+/// Identical refreshes are not rewritten, and a failed write only reports
+/// itself — a debug record must never take the line down with it.
+fn record_payload(path: PathBuf, input: &str) {
     if input.trim().is_empty() || std::fs::read_to_string(&path).ok().as_deref() == Some(input) {
-        return Ok(());
+        return;
     }
-    paths::write_atomically(&path, input)
+    if let Err(error) = paths::write_atomically(&path, input) {
+        eprintln!("[statusmaxxx] {error:#}");
+    }
 }
 
 /// Session JSON from the agent; run by hand from a terminal there is none to wait for.
@@ -185,8 +192,11 @@ fn read_stdin() -> Result<String> {
 fn session_start(host: Host) -> Result<()> {
     let input = read_stdin()?;
     // Recorded before parsing so even a malformed payload can be inspected.
-    record_payload(paths::last_hook_payload(host)?, &input)?;
+    record_payload(paths::last_hook_payload(host)?, &input);
     let session = Payload::parse(&input)?.into_session()?;
+    if let Some(id) = session.session_id.as_deref().filter(|id| !id.is_empty()) {
+        record_payload(paths::session_hook_payload(host, id)?, &input);
+    }
     let Some(repo) = Repo::discover(&session.cwd)? else {
         return Ok(());
     };
