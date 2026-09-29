@@ -141,7 +141,7 @@ A segment that fails shows `✗ <segment>` and writes the reason to stderr. To s
 statusmaxxx render --host claude < ~/.cache/statusmaxxx/payloads/claude.json
 ```
 
-`render` records every payload it receives in that file, so piping in hand-written JSON replaces the recorded session until the agent refreshes again.
+`render` records every payload it receives in that file, so piping in hand-written JSON replaces the recorded session until the agent refreshes again. The session-start hook records its payload the same way to `<agent>-hook.json`.
 
 ## License
 

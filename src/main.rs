@@ -147,13 +147,8 @@ fn render(host: Host) -> Result<()> {
     // The agent's own registry names the session as peers see it; that name
     // beats the title the payload carries.
     session.session_name = session.session_id.as_deref().and_then(|id| host.session_name(id)).or(session.session_name);
-    if !input.trim().is_empty() {
-        // The TUI previews each agent with the last session it really sent.
-        let path = paths::last_payload(host)?;
-        if std::fs::read_to_string(&path).ok().as_deref() != Some(input.as_str()) {
-            paths::write_atomically(&path, &input)?;
-        }
-    }
+    // The TUI previews each agent with the last session it really sent.
+    record_payload(paths::last_payload(host)?, &input)?;
     let config = match Config::load() {
         Ok(config) => config,
         Err(error) => {
@@ -168,6 +163,15 @@ fn render(host: Host) -> Result<()> {
     stdout.flush().context("Cannot write the status line")
 }
 
+/// The last thing the agent sent on a path, kept for debugging and replay.
+/// Identical refreshes are not rewritten.
+fn record_payload(path: PathBuf, input: &str) -> Result<()> {
+    if input.trim().is_empty() || std::fs::read_to_string(&path).ok().as_deref() == Some(input) {
+        return Ok(());
+    }
+    paths::write_atomically(&path, input)
+}
+
 /// Session JSON from the agent; run by hand from a terminal there is none to wait for.
 fn read_stdin() -> Result<String> {
     let mut input = String::new();
@@ -179,7 +183,10 @@ fn read_stdin() -> Result<String> {
 
 /// Outside a repository there is no worktree context to talk about, so it prints nothing.
 fn session_start(host: Host) -> Result<()> {
-    let session = Payload::parse(&read_stdin()?)?.into_session()?;
+    let input = read_stdin()?;
+    // Recorded before parsing so even a malformed payload can be inspected.
+    record_payload(paths::last_hook_payload(host)?, &input)?;
+    let session = Payload::parse(&input)?.into_session()?;
     let Some(repo) = Repo::discover(&session.cwd)? else {
         return Ok(());
     };

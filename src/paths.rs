@@ -46,6 +46,11 @@ pub fn last_payload(host: Host) -> Result<PathBuf> {
     Ok(cache_dir()?.join("payloads").join(format!("{}.json", host.id())))
 }
 
+/// The last session-start payload, beside the status line's.
+pub fn last_hook_payload(host: Host) -> Result<PathBuf> {
+    Ok(cache_dir()?.join("payloads").join(format!("{}-hook.json", host.id())))
+}
+
 /// The path agents should call. Prefers the `PATH` entry over the resolved
 /// executable so package-manager upgrades (versioned cellar paths) keep working.
 pub fn binary() -> Result<PathBuf> {
