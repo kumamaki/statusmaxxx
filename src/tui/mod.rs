@@ -28,7 +28,7 @@ pub fn run() -> Result<()> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Screen {
     Home,
-    /// The shared list, or one agent's own list.
+    /// The shared list, or one agent's scope (its own list once it edits).
     Segments(Option<Host>),
     Agents,
     Agent(Host),
@@ -49,10 +49,9 @@ const HOME: [HomeItem; 4] = [HomeItem::Segments, HomeItem::Agents, HomeItem::Sty
 enum AgentItem {
     Install,
     Uninstall,
-    Segments,
 }
 
-const AGENT_ITEMS: [AgentItem; 3] = [AgentItem::Install, AgentItem::Uninstall, AgentItem::Segments];
+const AGENT_ITEMS: [AgentItem; 2] = [AgentItem::Install, AgentItem::Uninstall];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StyleItem {
@@ -152,8 +151,11 @@ impl App {
             KeyCode::Esc => self.back(),
             KeyCode::Up | KeyCode::Char('k') => self.move_cursor(-1),
             KeyCode::Down | KeyCode::Char('j') => self.move_cursor(1),
+            KeyCode::Tab => self.switch_scope(1),
+            KeyCode::BackTab => self.switch_scope(-1),
             KeyCode::Char('m') if matches!(self.screen, Screen::Segments(_)) => self.moving = true,
             KeyCode::Char('i') if matches!(self.screen, Screen::Segments(_)) => self.toggle_icon(),
+            KeyCode::Char('r') if matches!(self.screen, Screen::Segments(Some(_))) => self.reset_scope(),
             KeyCode::Left | KeyCode::Char('h') => self.step(-1),
             KeyCode::Right | KeyCode::Char('l') => self.step(1),
             KeyCode::Enter | KeyCode::Char(' ') => self.activate(),
@@ -192,11 +194,10 @@ impl App {
     fn back(&mut self) {
         match self.screen {
             Screen::Home => self.done = true,
-            Screen::Segments(None) => self.open(Screen::Home, 0),
+            Screen::Segments(_) => self.open(Screen::Home, 0),
             Screen::Agents => self.open(Screen::Home, 1),
             Screen::Style => self.open(Screen::Home, 2),
             Screen::Agent(host) => self.open(Screen::Agents, self.agent_index(host)),
-            Screen::Segments(Some(host)) => self.open(Screen::Agent(host), 2),
         }
     }
 
@@ -213,19 +214,12 @@ impl App {
             Screen::Agent(host) => match AGENT_ITEMS[self.cursor] {
                 AgentItem::Install => self.apply(host, true),
                 AgentItem::Uninstall => self.apply(host, false),
-                AgentItem::Segments => {
-                    if !self.config.hosts.contains_key(&host) {
-                        self.config.segments_mut(Some(host));
-                        self.save();
-                    }
-                    self.open(Screen::Segments(Some(host)), 0);
-                }
             },
             Screen::Style => self.step(1),
         }
     }
 
-    /// ←/→: the previewed agent where the header offers it, or the choice on a chip row.
+    /// ←/→: the previewed agent where the header offers it, or the choice on a row.
     fn step(&mut self, offset: isize) {
         match self.screen {
             screen if view::cycles_preview(screen) => {
@@ -237,12 +231,6 @@ impl App {
                 }
                 let index = choices.iter().position(|host| *host == self.preview_host).unwrap_or(0) as isize + offset;
                 self.preview_host = choices[index.rem_euclid(choices.len() as isize) as usize];
-            }
-            Screen::Agent(host) if AGENT_ITEMS[self.cursor] == AgentItem::Segments => {
-                if self.config.hosts.remove(&host).is_none() {
-                    self.config.segments_mut(Some(host));
-                }
-                self.save();
             }
             Screen::Segments(host) => self.toggle_segment(host),
             Screen::Style => {
@@ -258,6 +246,41 @@ impl App {
                 self.save();
             }
             _ => {}
+        }
+    }
+
+    /// `tab` on Segments: the shared list, then each detected agent (all of them
+    /// when none are, like the Home preview picker).
+    fn switch_scope(&mut self, offset: isize) {
+        let Screen::Segments(current) = self.screen else { return };
+        let mut choices: Vec<Host> = self.agents.iter().filter(|row| row.detected).map(|row| row.host).collect();
+        if choices.is_empty() {
+            choices = Host::ALL.to_vec();
+        }
+        let scopes: Vec<Option<Host>> = std::iter::once(None).chain(choices.into_iter().map(Some)).collect();
+        let index = scopes.iter().position(|scope| *scope == current).unwrap_or(0) as isize + offset;
+        let scope = scopes[index.rem_euclid(scopes.len() as isize) as usize];
+        if scope != current {
+            self.open_segments(scope);
+        }
+    }
+
+    /// `r` on an agent's own list: back to following the shared one.
+    fn reset_scope(&mut self) {
+        let Screen::Segments(Some(host)) = self.screen else { return };
+        if self.config.hosts.remove(&host).is_none() {
+            return;
+        }
+        self.open_segments(Some(host));
+        self.save();
+    }
+
+    /// Opens the Segments screen at `scope` with the cursor on the segment it was on.
+    fn open_segments(&mut self, scope: Option<Host>) {
+        let segment = self.segment_order.get(self.cursor).copied();
+        self.open(Screen::Segments(scope), 0);
+        if let Some(index) = segment.and_then(|segment| self.segment_order.iter().position(|row| *row == segment)) {
+            self.cursor = index;
         }
     }
 
@@ -304,6 +327,8 @@ impl App {
     }
 
     /// The status line shows the segments `keep` picks, in the screen's order.
+    /// Looking at an agent's list, or moving a hidden row, creates no override;
+    /// the first change that alters the shown list does.
     fn write_shown(&mut self, host: Option<Host>, keep: impl Fn(Segment, bool) -> bool) {
         let shown: Vec<Segment> = self
             .segment_rows(host)
@@ -311,6 +336,9 @@ impl App {
             .filter(|(segment, shown)| keep(*segment, *shown))
             .map(|(segment, _)| segment)
             .collect();
+        if self.shown_segments(host) == shown.as_slice() {
+            return;
+        }
         *self.config.segments_mut(host) = shown;
         self.save();
     }

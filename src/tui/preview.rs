@@ -49,12 +49,17 @@ pub fn sample() -> Sample {
     }
 }
 
-/// What `host` would show for the sample session, and the column `marked` starts at.
-pub fn line(host: Host, config: &Config, sample: &Sample, marked: Option<Segment>) -> (Line<'static>, Option<usize>) {
+/// What `host` would show of `list` for the sample session, and the column `marked` starts at.
+pub fn line(
+    host: Host,
+    list: &[Segment],
+    config: &Config,
+    sample: &Sample,
+    marked: Option<Segment>,
+) -> (Line<'static>, Option<usize>) {
     if host.tier() == Tier::BuiltIn {
         // Built-in agents draw their own items, so the preview names the item ids.
-        let items = config
-            .segments_for(host)
+        let items = list
             .iter()
             .filter_map(|segment| host::builtin_item(host, *segment).map(|item| (*segment, vec![card::muted(item)])));
         return join(items, vec![card::muted(" · ")], marked);
@@ -67,7 +72,7 @@ pub fn line(host: Host, config: &Config, sample: &Sample, marked: Option<Segment
         Ok(text) => text.lines.into_iter().next().map_or_else(Vec::new, |line| line.spans),
         Err(error) => vec![card::focus(format!("Preview failed: {error}"))],
     };
-    let segments = render::segments(host, config, &sources).into_iter().map(|part| {
+    let segments = render::segments(list, &sources).into_iter().map(|part| {
         let spans = if colored {
             draw(render::ansi(std::slice::from_ref(&part), config, false))
         } else {
@@ -100,9 +105,9 @@ fn join(
     (Line::from(spans), marked_at)
 }
 
-/// Segments `host` is set to show but cannot.
-pub fn missing(host: Host, config: &Config) -> Vec<Segment> {
-    config.segments_for(host).iter().copied().filter(|segment| !host.supports(*segment)).collect()
+/// Segments `host` is set to show from `list` but cannot.
+pub fn missing(host: Host, list: &[Segment]) -> Vec<Segment> {
+    list.iter().copied().filter(|segment| !host.supports(*segment)).collect()
 }
 
 /// The sample without the fields `host` never sends.

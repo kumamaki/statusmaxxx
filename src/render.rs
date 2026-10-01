@@ -9,7 +9,7 @@ use crate::theme::{Role, Theme};
 /// `problems` are failures the line must still show — a corrupt config, a
 /// payload we could not read. They land as `✗` text after the segments.
 pub fn render(host: Host, config: &Config, session: &Session, problems: &[String]) -> String {
-    let segments = segments(host, config, &Sources::new(session, &config.icons));
+    let segments = segments(config.segments_for(host), &Sources::new(session, &config.icons));
     let error = problems.iter().map(|problem| format!("✗ {problem}")).collect::<Vec<_>>().join(" ");
     match host.output() {
         Output::Ansi { hyperlinks } => {
@@ -42,11 +42,9 @@ fn appended(line: String, error: &str, separator: &str, paint: impl FnOnce(&str)
     format!("{line}{separator}{}", paint(error))
 }
 
-/// The non-empty segments `host` shows, in order, each with what it drew.
-pub fn segments(host: Host, config: &Config, sources: &Sources) -> Vec<(Segment, Vec<Piece>)> {
-    config
-        .segments_for(host)
-        .iter()
+/// The non-empty segments `list` draws, in order, each with what it drew.
+pub fn segments(list: &[Segment], sources: &Sources) -> Vec<(Segment, Vec<Piece>)> {
+    list.iter()
         .map(|segment| (*segment, render_segment(*segment, sources)))
         .filter(|(_, pieces)| !pieces.is_empty())
         .collect()

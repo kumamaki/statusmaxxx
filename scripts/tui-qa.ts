@@ -22,6 +22,7 @@ const CODEX_CONFIG = ".codex/config.toml";
 const CODEX_DEFAULT_ITEMS = ["current-dir", "git-branch", "model-with-reasoning", "context-used"];
 const GEMINI_SETTINGS = ".gemini/settings.json";
 const GEMINI_HAND_EDITED = `${JSON.stringify({ ui: { footer: { items: ["model-name"] } } })}\n`;
+const CONFIG = ".config/statusmaxxx/config.toml";
 
 const failed: string[] = [];
 let step = 0;
@@ -157,7 +158,7 @@ async function main(): Promise<number> {
 
     await press("enter");
     const segments = await snapshot("segments");
-    must(segments, "segments", "Every agent uses this list, unless it has its own · Saved as you go", "Shown", "Hidden", "not in Amp", "◂ Shown");
+    must(segments, "segments", "Every agent uses this list · Saved as you go", "Shown", "Hidden", "not in Amp", "◂ Shown", "[tab]", "All agents");
     if (rowOrder(segments).join(", ") !== "Directory, Worktree, Branch, Changes, Current issue, Model, Context, Session, Cost") {
       failed.push(`segments: rows are ${rowOrder(segments)}`);
     }
@@ -217,6 +218,32 @@ async function main(): Promise<number> {
     must(previewLine(iconOff), "segments-branch-icon-off", "\uf1bb");
     await press("i");
 
+    // tab scopes the screen to one agent; looking alone writes no override.
+    await press("tab");
+    const scoped = await snapshot("segments-scope-claude");
+    must(scoped, "segments-scope-claude", "[tab]", "Claude Code", "uses the shared list · a change gives it its own", "tab switches agent", "i toggles its icon for every agent");
+    mustNot(await sandboxFile(CONFIG), "segments-scope-claude-config", "[hosts.claude]");
+
+    // The first edit gives the agent its own list; the shared one is untouched.
+    await press("space");
+    const own = await snapshot("segments-scope-claude-own");
+    must(own, "segments-scope-claude-own", "Claude Code has its own list · r resets it to shared");
+    mustNot(previewLine(own), "segments-scope-claude-own", "eng-42");
+    const configWithOwn = await sandboxFile(CONFIG);
+    must(configWithOwn, "segments-scope-claude-own-config", "[hosts.claude]");
+    mustNot(configWithOwn.split("[hosts.claude]")[1] ?? "", "segments-scope-claude-own-config", '"branch"');
+
+    // r drops it; the agent follows the shared list again.
+    await press("r");
+    const reset = await snapshot("segments-scope-claude-reset");
+    must(reset, "segments-scope-claude-reset", "uses the shared list");
+    must(previewLine(reset), "segments-scope-claude-reset", "eng-42");
+    mustNot(await sandboxFile(CONFIG), "segments-scope-claude-reset-config", "[hosts.claude]");
+
+    // tab keeps cycling through the detected agents.
+    await press("tab");
+    must(await snapshot("segments-scope-droid"), "segments-scope-droid", "Factory Droid uses the shared list");
+
     await press("esc", "down", "enter");
     const agents = await snapshot("agents");
     must(agents, "agents", "Claude Code", "Amp", "Codex CLI", "Available", "Not found", "Has its own status line (statusline.sh)");
@@ -230,7 +257,8 @@ async function main(): Promise<number> {
 
     await press("enter");
     const agent = await snapshot("agent-amp");
-    must(agent, "agent-amp", "experimental status item", "Install", "Uninstall", "Segments", "Shared");
+    must(agent, "agent-amp", "experimental status item", "Install", "Uninstall");
+    mustNot(agent, "agent-amp", "Shared", "Own list");
     await press("enter");
     await tui(["wait", "Reinstall", "--timeout", "5000"]);
     const installed = await snapshot("agent-amp-installed");
@@ -266,7 +294,7 @@ async function main(): Promise<number> {
     if (new Set(arrowColumns).size !== 1) failed.push(`style-separator-bar: arrows at columns ${arrowColumns}`);
 
     await tui(["resize", "80", "24"]);
-    await press("esc", "enter");
+    await press("esc", "up", "up", "enter");
     const narrow = await snapshot("segments-80x24");
     cardChrome(narrow, "segments-80x24");
   } finally {

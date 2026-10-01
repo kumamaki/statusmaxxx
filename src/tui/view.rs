@@ -4,7 +4,7 @@
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr;
 
-use super::card::{self, Card, chip, focus, muted, spread, text};
+use super::card::{self, Card, focus, muted, spread, text};
 use super::{AGENT_ITEMS, AgentItem, App, HOME, HomeItem, STYLE_ITEMS, Screen, StyleItem, preview};
 use crate::host::{Host, InstallState, Tier};
 use crate::segment::Segment;
@@ -23,11 +23,12 @@ pub fn card(app: &App, width: usize) -> (Card, usize) {
     (Card { width, header: header(app, inner), body, notice: app.notice.clone(), hint }, focus_line)
 }
 
-/// Centered: the previewed line, whose line it is, and what that agent leaves out.
+/// Centered: the previewed line, the scope or agent it belongs to, and what that agent leaves out.
 fn header(app: &App, inner: usize) -> Vec<Line<'static>> {
     let host = previewed(app);
+    let list = previewed_list(app);
     let marked = marked(app);
-    let (line, marked_at) = preview::line(host, &app.config, &app.sample, marked);
+    let (line, marked_at) = preview::line(host, list, &app.config, &app.sample, marked);
     let line = card::fit(line, inner);
     let lead = inner.saturating_sub(line.width()) / 2;
     let mut header = Vec::new();
@@ -35,12 +36,12 @@ fn header(app: &App, inner: usize) -> Vec<Line<'static>> {
     if marked.is_some() {
         header.push(pointer(marked_at.filter(|column| *column < line.width()).map(|column| lead + column)));
     }
-    header.extend([
-        card::center(line, inner),
-        Line::default(),
-        card::center(agent_control(host, cycles_preview(app.screen)), inner),
-    ]);
-    let missing = preview::missing(host, &app.config);
+    let control = match app.screen {
+        Screen::Segments(scope) => scope_control(scope),
+        _ => agent_control(host, cycles_preview(app.screen)),
+    };
+    header.extend([card::center(line, inner), Line::default(), card::center(control, inner)]);
+    let missing = preview::missing(host, list);
     if !missing.is_empty() {
         header.push(card::center(Line::from(muted(why_missing(host, &missing))), inner));
     }
@@ -57,6 +58,17 @@ fn agent_control(host: Host, cycles: bool) -> Line<'static> {
     let mut spans = vec![muted("◂  ")];
     spans.extend(card::slot(text(host.label()), widest));
     spans.push(muted("  ▸"));
+    Line::from(spans)
+}
+
+/// `[tab]  All agents`: the Segments screen's scope. A keycap rather than ◂ ▸,
+/// which stand for ←/→ — that pair already shows and hides segments.
+fn scope_control(scope: Option<Host>) -> Line<'static> {
+    const ALL: &str = "All agents";
+    let label = scope.map_or(ALL, |host| host.label());
+    let widest = Host::ALL.iter().map(|host| host.label().width()).chain([ALL.width()]).max().unwrap_or(0);
+    let mut spans = vec![muted("[tab]  ")];
+    spans.extend(card::slot(text(label), widest));
     Line::from(spans)
 }
 
@@ -117,6 +129,20 @@ fn previewed(app: &App) -> Host {
     }
 }
 
+/// The segment list the preview draws: on Segments the list being edited, so
+/// edits show up; anywhere else the list the previewed agent actually uses.
+fn previewed_list(app: &App) -> &[Segment] {
+    match app.screen {
+        Screen::Segments(scope) => app.shown_segments(scope),
+        _ => app.config.segments_for(previewed(app)),
+    }
+}
+
+/// Labels of the agents with their own segment list, in config order.
+fn own_lists(app: &App) -> Vec<&'static str> {
+    app.config.hosts.keys().map(|host| host.label()).collect()
+}
+
 type Screenful = (Vec<Line<'static>>, usize, String);
 
 /// On every screen that edits the config, which has no save step.
@@ -133,7 +159,7 @@ fn home(app: &App) -> Screenful {
             focus_line = body.len();
         }
         let (name, description) = match item {
-            HomeItem::Segments => ("Segments", segment_names(&app.config.segments)),
+            HomeItem::Segments => ("Segments", shared_summary(app)),
             HomeItem::Agents => ("Agents", agent_counts(app)),
             HomeItem::Style => {
                 let separator = separator::name(&app.config.separator);
@@ -156,9 +182,14 @@ fn home(app: &App) -> Screenful {
 }
 
 fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
+    let own = host.is_some_and(|host| app.config.hosts.contains_key(&host));
     let scope = match host {
-        Some(host) => format!("Only {} uses this list", host.label()),
-        None => "Every agent uses this list, unless it has its own".to_string(),
+        Some(host) if own => format!("{} has its own list · r resets it to shared", host.label()),
+        Some(host) => format!("{} uses the shared list · a change gives it its own", host.label()),
+        None => match own_lists(app).as_slice() {
+            [] => "Every agent uses this list".to_string(),
+            owners => format!("Every other agent uses this list · own list: {}", owners.join(", ")),
+        },
     };
     let mut body = vec![Line::from(muted(format!("{scope} · {SAVED}"))), Line::default()];
     let mut focus_line = 0;
@@ -182,14 +213,20 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
         body.push(Line::from(vec![Span::raw(" ".repeat(ICON_SLOT)), muted(description)]));
     }
     let (segment, shown) = rows[app.cursor];
-    let hint = match (app.moving, shown, segment.has_icon()) {
-        (true, _, _) => "↑/↓ moves it · enter puts it down",
-        (false, true, true) => "←/→ hides it · i toggles its icon · m moves it",
-        (false, true, false) => "←/→ hides it · m moves it · esc back",
-        (false, false, true) => "←/→ shows it · i toggles its icon · m moves it",
-        (false, false, false) => "←/→ shows it · m moves it · esc back",
+    let scope = match (host, own) {
+        (Some(_), true) => "tab switches agent · r resets it",
+        (Some(_), false) => "tab switches agent",
+        (None, _) => "tab picks an agent",
     };
-    (body, focus_line, hint.to_string())
+    let icons = if host.is_some() { "i toggles its icon for every agent" } else { "i toggles its icon" };
+    let hint = match (app.moving, shown, segment.has_icon()) {
+        (true, _, _) => "↑/↓ moves it · enter puts it down".to_string(),
+        (false, true, true) => format!("←/→ hides it · {icons} · m moves it · {scope}"),
+        (false, true, false) => format!("←/→ hides it · m moves it · {scope} · esc back"),
+        (false, false, true) => format!("←/→ shows it · {icons} · m moves it · {scope}"),
+        (false, false, false) => format!("←/→ shows it · m moves it · {scope} · esc back"),
+    };
+    (body, focus_line, hint)
 }
 
 fn agents(app: &App, inner: usize) -> Screenful {
@@ -201,7 +238,7 @@ fn agents(app: &App, inner: usize) -> Screenful {
             let focused = index == app.cursor;
             let state = state_name(row.detected, &row.state);
             let state = if row.state == InstallState::Installed { card::info(state) } else { muted(state) };
-            let own = if app.config.hosts.contains_key(&row.host) { muted("Own segments  ") } else { Span::raw("") };
+            let own = if app.config.hosts.contains_key(&row.host) { muted("Own list  ") } else { Span::raw("") };
             spread(vec![name_span(row.host.label(), focused, row.detected)], vec![own, state], inner)
         })
         .collect();
@@ -217,7 +254,6 @@ fn agent(app: &App, host: Host, inner: usize) -> Screenful {
     let mut body: Vec<Line<'static>> = wrap(&about, inner).into_iter().map(|line| Line::from(muted(line))).collect();
     body.push(Line::default());
     let installed = app.agent(host).state == InstallState::Installed;
-    let own = app.config.hosts.contains_key(&host);
     let mut focus_line = 0;
     for (index, item) in AGENT_ITEMS.iter().enumerate() {
         let focused = index == app.cursor;
@@ -236,22 +272,9 @@ fn agent(app: &App, host: Host, inner: usize) -> Screenful {
                 body.push(Line::from(name_span("Uninstall", focused, true)));
                 body.push(Line::from(muted("Removes what statusmaxxx wrote, and restores what it replaced")));
             }
-            AgentItem::Segments => {
-                let chips = vec![chip("Shared", !own, focused), muted("  "), chip("Own", own, focused)];
-                body.push(spread(vec![name_span("Segments", focused, true)], chips, inner));
-                body.push(Line::from(muted(if own {
-                    segment_names(app.config.segments_for(host))
-                } else {
-                    "Same list as every other agent".to_string()
-                })));
-            }
         }
     }
-    let hint = match AGENT_ITEMS[app.cursor] {
-        AgentItem::Install | AgentItem::Uninstall => "enter runs it · esc back".to_string(),
-        AgentItem::Segments => "←/→ shared or own · enter edits the list · esc back".to_string(),
-    };
-    (body, focus_line, hint)
+    (body, focus_line, "enter runs it · esc back".to_string())
 }
 
 fn style(app: &App, inner: usize) -> Screenful {
@@ -342,6 +365,15 @@ fn install_summary(host: Host) -> String {
 
 fn segment_names(segments: &[Segment]) -> String {
     segments.iter().map(|segment| segment.label()).collect::<Vec<_>>().join(" · ")
+}
+
+/// The shared list's names, plus which agents went their own way.
+fn shared_summary(app: &App) -> String {
+    let names = segment_names(&app.config.segments);
+    match own_lists(app).as_slice() {
+        [] => names,
+        owners => format!("{names} · own list: {}", owners.join(", ")),
+    }
 }
 
 /// `Amp doesn't report its model and context`

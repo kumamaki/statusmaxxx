@@ -42,15 +42,6 @@ pub fn success(content: impl Into<String>) -> Span<'static> {
     Span::styled(content.into(), Style::new().fg(SUCCESS))
 }
 
-/// One option of a choice row; the picked one is red, and bracketed while its row has focus.
-pub fn chip(name: &str, picked: bool, row_focused: bool) -> Span<'static> {
-    match (picked, row_focused) {
-        (true, true) => focus(format!("[{name}]")),
-        (true, false) => focus(name),
-        (false, _) => muted(name),
-    }
-}
-
 pub struct Card {
     pub width: usize,
     pub header: Vec<Line<'static>>,
