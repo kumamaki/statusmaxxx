@@ -20,6 +20,7 @@ pub struct Config {
     pub icons: BTreeSet<Segment>,
     pub separator: String,
     /// Hosts that show a different segment list than `segments`.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub hosts: BTreeMap<Host, HostOverride>,
 }
 

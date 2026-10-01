@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /** tuistory product QA for `statusmaxxx config`.
 
-Runs the debug build against a sandbox HOME with four fake agents. The preview
+Runs the debug build against a sandbox HOME with six fake agents. The preview
 draws a made-up repository and issue, so every screen is deterministic. Snapshot and screenshot after every action into qa-results/.
 Asserts copy and chrome, not pixels.
 */
@@ -47,6 +47,11 @@ async function press(...keys: string[]): Promise<void> {
   for (const key of keys) await tui(["press", key]);
 }
 
+/** Keys pressed together in one call, like `ctrl c` for Ctrl+C. */
+async function chord(...keys: string[]): Promise<void> {
+  await tui(["press", ...keys]);
+}
+
 async function snapshot(label: string): Promise<string> {
   await tui(["wait-idle", "--timeout", "3000"], true);
   step += 1;
@@ -82,15 +87,20 @@ function rowOrder(screen: string): string[] {
   return [...screen.matchAll(/│ {3}(?:\S  |   )([A-Z][a-z]+(?: [a-z]+)?) +(?:◂ +)?(?:Shown|Hidden|Moving)/gu)].map((match) => match[1]);
 }
 
-/** The preview line: the header row that shows the sample worktree. */
-function previewLine(screen: string): string {
-  return screen.split("\n").find((row) => row.includes("shop:auth")) ?? "";
+/** The preview line: the header row that shows the sample worktree. Empty means the preview vanished. */
+function previewLine(screen: string, label: string): string {
+  const line = screen.split("\n").find((row) => row.includes("shop:auth"));
+  if (line === undefined) {
+    failed.push(`${label}: no preview row`);
+    return "";
+  }
+  return line;
 }
 
 /** Whether the ↴ above the preview sits over the first cell of `start`. */
 function points(screen: string, label: string, start: string): void {
   const pointer = screen.split("\n").find((row) => row.includes("↴"));
-  const column = previewLine(screen).indexOf(start);
+  const column = previewLine(screen, label).indexOf(start);
   if (pointer?.indexOf("↴") !== column) failed.push(`${label}: ↴ at ${pointer?.indexOf("↴")}, ${JSON.stringify(start)} at ${column}`);
 }
 
@@ -109,6 +119,10 @@ async function fixture(): Promise<{ home: string; env: Record<string, string> }>
     HOME: home,
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_CACHE_HOME: join(home, ".cache"),
+    // Agents whose home is an env var would otherwise resolve outside the sandbox.
+    CLAUDE_CONFIG_DIR: join(home, ".claude"),
+    COPILOT_HOME: join(home, ".copilot"),
+    CODEX_HOME: join(home, ".codex"),
   };
   const droidLine = { statusLine: { type: "command", command: join(home, ".factory/statusline.sh") } };
   await Bun.write(join(home, ".factory/settings.json"), JSON.stringify(droidLine));
@@ -126,8 +140,20 @@ async function main(): Promise<number> {
   await rm(ARTIFACTS, { recursive: true, force: true });
   await mkdir(ARTIFACTS, { recursive: true });
   await tui(["close"], true);
+  const leftover = await tui(["snapshot"], true);
+  if (!leftover.includes("not found")) {
+    console.error("FAIL  a stale statusmaxxx-tui session survived close — launch would reattach it");
+    return 1;
+  }
   const { home: sandbox, env } = await fixture();
-  const sandboxFile = (path: string) => Bun.file(join(sandbox, path)).text();
+  const sandboxFile = async (path: string, label: string) => {
+    try {
+      return await Bun.file(join(sandbox, path)).text();
+    } catch {
+      failed.push(`${label}: missing ${path}`);
+      return "";
+    }
+  };
 
   const envFlags = Object.entries(env).flatMap(([key, value]) => ["--env", `${key}=${value}`]);
   await sh(["tuistory", "launch", `${BINARY} config`, "-s", SESSION, "--cwd", sandbox, "--cols", String(COLS), "--rows", String(ROWS), "--background", "--timeout", "8000", ...envFlags]);
@@ -148,7 +174,7 @@ async function main(): Promise<number> {
     const droid = await snapshot("home-droid");
     // Droid sends everything the default segments need; only cost, hidden, is missing.
     mustNot(droid, "home-droid", "doesn't report");
-    must(previewLine(droid), "home-droid", "42%");
+    must(previewLine(droid, "home-droid"), "home-droid", "42%");
     const droidStepper = stepper(droid, "home-droid");
     if (droidStepper.name !== "Factory Droid") failed.push(`home-droid: switcher shows ${JSON.stringify(droidStepper.name)}`);
     if (droidStepper.left !== homeStepper.left || droidStepper.right !== homeStepper.right) {
@@ -158,7 +184,7 @@ async function main(): Promise<number> {
 
     await press("enter");
     const segments = await snapshot("segments");
-    must(segments, "segments", "Every agent uses this list · Saved as you go", "Shown", "Hidden", "not in Amp", "◂ Shown", "[tab]", "All agents");
+    must(segments, "segments", "Every agent uses this list · shown as Claude Code · Saved as you go", "Shown", "Hidden", "not in Amp", "◂ Shown", "[tab]", "All agents");
     if (rowOrder(segments).join(", ") !== "Directory, Worktree, Branch, Changes, Current issue, Model, Context, Session, Cost") {
       failed.push(`segments: rows are ${rowOrder(segments)}`);
     }
@@ -171,21 +197,21 @@ async function main(): Promise<number> {
 
     await press("down", "down", "space");
     const hidden = await snapshot("segments-branch-hidden");
-    mustNot(previewLine(hidden), "segments-branch-hidden", "eng-42");
+    mustNot(previewLine(hidden, "segments-branch-hidden"), "segments-branch-hidden", "eng-42");
     mustNot(hidden, "segments-branch-hidden", "↴");
     // Codex copies the list, so it follows; Gemini's hand-edited list stays.
     must(hidden, "segments-branch-hidden", "✓ Updated Codex CLI · new sessions show the change");
-    must(await sandboxFile(CODEX_CONFIG), "segments-branch-hidden-codex", '"current-dir", "model-with-reasoning", "context-used"');
+    must(await sandboxFile(CODEX_CONFIG, "segments-branch-hidden-codex"), "segments-branch-hidden-codex", '"current-dir", "model-with-reasoning", "context-used"');
     mustNot(hidden, "segments-branch-hidden", "Updated Gemini");
-    mustNot(await sandboxFile(CODEX_CONFIG), "segments-branch-hidden-codex", "git-branch");
-    if ((await sandboxFile(GEMINI_SETTINGS)) !== GEMINI_HAND_EDITED) failed.push("segments-branch-hidden: Gemini settings changed");
+    mustNot(await sandboxFile(CODEX_CONFIG, "segments-branch-hidden-codex"), "segments-branch-hidden-codex", "git-branch");
+    if ((await sandboxFile(GEMINI_SETTINGS, "segments-branch-hidden-gemini")) !== GEMINI_HAND_EDITED) failed.push("segments-branch-hidden: Gemini settings changed");
     if (rowOrder(hidden).join() !== rowOrder(segments).join()) {
       failed.push(`segments-branch-hidden: rows moved from ${rowOrder(segments)} to ${rowOrder(hidden)}`);
     }
     await press("space");
     const restored = await snapshot("segments-branch-restored");
-    must(previewLine(restored), "segments-branch-restored", "eng-42");
-    must(await sandboxFile(CODEX_CONFIG), "segments-branch-restored-codex", '"git-branch"');
+    must(previewLine(restored, "segments-branch-restored"), "segments-branch-restored", "eng-42");
+    must(await sandboxFile(CODEX_CONFIG, "segments-branch-restored-codex"), "segments-branch-restored-codex", '"git-branch"');
     points(restored, "segments-branch-pointer", "\ue725");
     if (rowOrder(restored).join() !== rowOrder(segments).join()) {
       failed.push(`segments-branch-restored: rows moved to ${rowOrder(restored)}`);
@@ -198,55 +224,89 @@ async function main(): Promise<number> {
     const moved = await snapshot("segments-branch-moved");
     const order = rowOrder(moved);
     if (order.indexOf("Changes") > order.indexOf("Branch")) failed.push(`segments-branch-moved: order is ${order}`);
-    const line = previewLine(moved);
+    const line = previewLine(moved, "segments-branch-moved");
     if (line.indexOf("±3") > line.indexOf("eng-42")) failed.push(`segments-branch-moved: preview is ${line.trim()}`);
     mustNot(moved, "segments-branch-moved", "Moving");
     await press("m", "up", "enter");
 
     // ←/→ flip shown and hidden on the focused row, like space.
     await press("right");
-    mustNot(previewLine(await snapshot("segments-branch-arrow-hidden")), "segments-branch-arrow-hidden", "eng-42");
+    mustNot(previewLine(await snapshot("segments-branch-arrow-hidden"), "segments-branch-arrow-hidden"), "segments-branch-arrow-hidden", "eng-42");
     await press("left");
-    must(previewLine(await snapshot("segments-branch-arrow-shown")), "segments-branch-arrow-shown", "eng-42");
+    must(previewLine(await snapshot("segments-branch-arrow-shown"), "segments-branch-arrow-shown"), "segments-branch-arrow-shown", "eng-42");
 
     // i turns only branch's icon off.
     const gitIcon = "\ue725";
-    must(previewLine(restored), "segments-branch-icon-before", gitIcon);
+    must(previewLine(restored, "segments-branch-icon-before"), "segments-branch-icon-before", gitIcon);
     await press("i");
     const iconOff = await snapshot("segments-branch-icon-off");
-    mustNot(previewLine(iconOff), "segments-branch-icon-off", gitIcon);
-    must(previewLine(iconOff), "segments-branch-icon-off", "\uf1bb");
+    mustNot(previewLine(iconOff, "segments-branch-icon-off"), "segments-branch-icon-off", gitIcon);
+    must(previewLine(iconOff, "segments-branch-icon-off"), "segments-branch-icon-off", "\uf1bb");
     await press("i");
 
     // tab scopes the screen to one agent; looking alone writes no override.
     await press("tab");
     const scoped = await snapshot("segments-scope-claude");
-    must(scoped, "segments-scope-claude", "[tab]", "Claude Code", "uses the shared list · a change gives it its own", "tab switches agent", "i toggles its icon for every agent");
-    mustNot(await sandboxFile(CONFIG), "segments-scope-claude-config", "[hosts.claude]");
+    must(scoped, "segments-scope-claude", "[tab]", "Claude Code", "uses the shared list · a change gives it its own", "tab switches agent", "i toggles icon globally");
+    mustNot(await sandboxFile(CONFIG, "segments-scope-claude-config"), "segments-scope-claude-config", "[hosts.claude]");
 
-    // The first edit gives the agent its own list; the shared one is untouched.
-    await press("space");
+    // Carrying a hidden row edits no shown list, so Claude still has no override.
+    await press("down", "down", "down", "down", "down", "m", "down", "enter");
+    const hiddenMove = await snapshot("segments-scope-claude-hidden-moved");
+    must(hiddenMove, "segments-scope-claude-hidden-moved", "uses the shared list");
+    mustNot(await sandboxFile(CONFIG, "segments-scope-claude-hidden-moved-config"), "segments-scope-claude-hidden-moved-config", "[hosts.claude]");
+
+    // The first shown-list change gives the agent its own list; shared is untouched.
+    await press("up", "up", "up", "up", "up", "up", "space");
     const own = await snapshot("segments-scope-claude-own");
     must(own, "segments-scope-claude-own", "Claude Code has its own list · r resets it to shared");
-    mustNot(previewLine(own), "segments-scope-claude-own", "eng-42");
-    const configWithOwn = await sandboxFile(CONFIG);
+    mustNot(previewLine(own, "segments-scope-claude-own"), "segments-scope-claude-own", "eng-42");
+    const configWithOwn = await sandboxFile(CONFIG, "segments-scope-claude-own-config");
     must(configWithOwn, "segments-scope-claude-own-config", "[hosts.claude]");
-    mustNot(configWithOwn.split("[hosts.claude]")[1] ?? "", "segments-scope-claude-own-config", '"branch"');
+    const claudeTable = configWithOwn.split("[hosts.claude]")[1]?.split("\n[")[0] ?? "";
+    must(claudeTable, "segments-scope-claude-own-config", "directory");
+    mustNot(claudeTable, "segments-scope-claude-own-config", '"branch"');
 
-    // r drops it; the agent follows the shared list again.
+    // While it exists, Home, Agents, and the shared scope all name it.
+    await press("esc");
+    must(await snapshot("home-own-list"), "home-own-list", "own list:");
+    await press("down", "enter");
+    const agentsOwn = await snapshot("agents-own-list");
+    must(agentsOwn, "agents-own-list", "Own list", "tab on Segments edits its own list");
+    await press("esc", "up", "enter");
+
+    // shift-tab walks backwards and wraps: All agents → last detected agent.
+    await chord("shift", "tab");
+    const gemini = await snapshot("segments-scope-gemini");
+    must(gemini, "segments-scope-gemini", "Gemini CLI uses the shared list", "has no item", "model-name");
+
+    // tab wraps back to All agents, which still names the own list it skips.
+    await press("tab");
+    const sharedOwn = await snapshot("segments-scope-all-own");
+    must(sharedOwn, "segments-scope-all-own", "All agents", "own list: Claude Code", "shown as Claude Code");
+
+    // Back on Claude, r drops the override; the agent follows the shared list again.
+    await press("tab");
+    const ownAgain = await snapshot("segments-scope-claude-own-again");
+    must(ownAgain, "segments-scope-claude-own-again", "Claude Code has its own list");
+    mustNot(previewLine(ownAgain, "segments-scope-claude-own-again"), "segments-scope-claude-own-again", "eng-42");
     await press("r");
     const reset = await snapshot("segments-scope-claude-reset");
-    must(reset, "segments-scope-claude-reset", "uses the shared list");
-    must(previewLine(reset), "segments-scope-claude-reset", "eng-42");
-    mustNot(await sandboxFile(CONFIG), "segments-scope-claude-reset-config", "[hosts.claude]");
+    must(reset, "segments-scope-claude-reset", "uses the shared list", "✓ Claude Code follows the shared list");
+    must(previewLine(reset, "segments-scope-claude-reset"), "segments-scope-claude-reset", "eng-42");
+    mustNot(await sandboxFile(CONFIG, "segments-scope-claude-reset-config"), "segments-scope-claude-reset-config", "[hosts");
 
-    // tab keeps cycling through the detected agents.
-    await press("tab");
-    must(await snapshot("segments-scope-droid"), "segments-scope-droid", "Factory Droid uses the shared list");
+    // Amp's scoped preview proves the header renders as that agent: plain text, no model/context.
+    await press("tab", "tab");
+    const ampScope = await snapshot("segments-scope-amp");
+    must(ampScope, "segments-scope-amp", "Amp uses the shared list", "Amp doesn't report its model and context");
+    must(previewLine(ampScope, "segments-scope-amp"), "segments-scope-amp", "shop:auth");
+    mustNot(previewLine(ampScope, "segments-scope-amp"), "segments-scope-amp", "Opus");
 
     await press("esc", "down", "enter");
     const agents = await snapshot("agents");
     must(agents, "agents", "Claude Code", "Amp", "Codex CLI", "Available", "Not found", "Has its own status line (statusline.sh)");
+    mustNot(agents, "agents", "Own list");
     cardChrome(agents, "agents");
 
     await press("down", "down", "down", "down", "down");
@@ -258,7 +318,7 @@ async function main(): Promise<number> {
     await press("enter");
     const agent = await snapshot("agent-amp");
     must(agent, "agent-amp", "experimental status item", "Install", "Uninstall");
-    mustNot(agent, "agent-amp", "Shared", "Own list");
+    mustNot(agent, "agent-amp", "Shared", "Own list", "Segments");
     await press("enter");
     await tui(["wait", "Reinstall", "--timeout", "5000"]);
     const installed = await snapshot("agent-amp-installed");
@@ -282,20 +342,21 @@ async function main(): Promise<number> {
     const style = await snapshot("style");
     must(style, "style", "Saved as you go", "Theme", "Short Giraffe", "Separator", "Dot");
     mustNot(style, "style", "Icons");
-    must(previewLine(style), "style", "eng-42 · ±3 · ");
+    must(previewLine(style, "style"), "style", "eng-42 · ±3 · ");
     cardChrome(style, "style");
 
     // The divider shows in the preview, and both pickers keep their arrows in one column.
     await press("down", "right");
     const bar = await snapshot("style-separator-bar");
-    must(bar, "style-separator-bar", "Bar");
-    must(previewLine(bar), "style-separator-bar", "eng-42 │ ±3 │ ");
+    must(bar, "style-separator-bar", "Bar", "◂");
+    must(previewLine(bar, "style-separator-bar"), "style-separator-bar", "eng-42 │ ±3 │ ");
     const arrowColumns = bar.split("\n").filter((row) => /Theme|Separator/u.test(row)).map((row) => row.indexOf("◂"));
-    if (new Set(arrowColumns).size !== 1) failed.push(`style-separator-bar: arrows at columns ${arrowColumns}`);
+    if (arrowColumns.length !== 2 || new Set(arrowColumns).size !== 1) failed.push(`style-separator-bar: arrows at columns ${arrowColumns}`);
 
     await tui(["resize", "80", "24"]);
     await press("esc", "up", "up", "enter");
     const narrow = await snapshot("segments-80x24");
+    must(narrow, "segments-80x24", "Every agent uses this list", "tab picks an agent");
     cardChrome(narrow, "segments-80x24");
   } finally {
     await tui(["close"], true);

@@ -75,7 +75,7 @@ struct App {
     sample: preview::Sample,
     screen: Screen,
     cursor: usize,
-    /// The agent Home and Style preview; ←/→ on Home cycles it.
+    /// The agent the shared screens preview through; ←/→ on Home cycles it.
     preview_host: Host,
     /// Outcome of the last action on this screen.
     notice: Vec<Line<'static>>,
@@ -155,7 +155,7 @@ impl App {
             KeyCode::BackTab => self.switch_scope(-1),
             KeyCode::Char('m') if matches!(self.screen, Screen::Segments(_)) => self.moving = true,
             KeyCode::Char('i') if matches!(self.screen, Screen::Segments(_)) => self.toggle_icon(),
-            KeyCode::Char('r') if matches!(self.screen, Screen::Segments(Some(_))) => self.reset_scope(),
+            KeyCode::Char('r') if matches!(self.screen, Screen::Segments(Some(_))) => self.reset_list(),
             KeyCode::Left | KeyCode::Char('h') => self.step(-1),
             KeyCode::Right | KeyCode::Char('l') => self.step(1),
             KeyCode::Enter | KeyCode::Char(' ') => self.activate(),
@@ -183,8 +183,8 @@ impl App {
         self.cursor = cursor;
         self.notice.clear();
         self.moving = false;
-        if let Screen::Segments(host) = screen {
-            let shown = self.shown_segments(host);
+        if let Screen::Segments(scope) = screen {
+            let shown = self.shown_segments(scope);
             let hidden = Segment::ALL.into_iter().filter(|segment| !shown.contains(segment));
             self.segment_order = shown.iter().copied().chain(hidden).collect();
         }
@@ -209,7 +209,7 @@ impl App {
                 HomeItem::Style => self.open(Screen::Style, 0),
                 HomeItem::Quit => self.done = true,
             },
-            Screen::Segments(host) => self.toggle_segment(host),
+            Screen::Segments(scope) => self.toggle_segment(scope),
             Screen::Agents => self.open(Screen::Agent(self.agents[self.cursor].host), 0),
             Screen::Agent(host) => match AGENT_ITEMS[self.cursor] {
                 AgentItem::Install => self.apply(host, true),
@@ -223,16 +223,11 @@ impl App {
     fn step(&mut self, offset: isize) {
         match self.screen {
             screen if view::cycles_preview(screen) => {
-                // Agents on this machine; all of them when none are.
-                let mut choices: Vec<Host> =
-                    self.agents.iter().filter(|row| row.detected).map(|row| row.host).collect();
-                if choices.is_empty() {
-                    choices = Host::ALL.to_vec();
-                }
+                let choices = self.detected_or_all();
                 let index = choices.iter().position(|host| *host == self.preview_host).unwrap_or(0) as isize + offset;
                 self.preview_host = choices[index.rem_euclid(choices.len() as isize) as usize];
             }
-            Screen::Segments(host) => self.toggle_segment(host),
+            Screen::Segments(scope) => self.toggle_segment(scope),
             Screen::Style => {
                 match STYLE_ITEMS[self.cursor] {
                     StyleItem::Theme => {
@@ -249,30 +244,33 @@ impl App {
         }
     }
 
-    /// `tab` on Segments: the shared list, then each detected agent (all of them
-    /// when none are, like the Home preview picker).
+    /// `tab` on Segments cycles the scopes `scope_choices` lists.
     fn switch_scope(&mut self, offset: isize) {
         let Screen::Segments(current) = self.screen else { return };
-        let mut choices: Vec<Host> = self.agents.iter().filter(|row| row.detected).map(|row| row.host).collect();
-        if choices.is_empty() {
-            choices = Host::ALL.to_vec();
-        }
-        let scopes: Vec<Option<Host>> = std::iter::once(None).chain(choices.into_iter().map(Some)).collect();
+        let owned: Vec<Host> = self.config.hosts.keys().copied().collect();
+        let scopes = scope_choices(&self.detected_or_all(), &owned);
         let index = scopes.iter().position(|scope| *scope == current).unwrap_or(0) as isize + offset;
-        let scope = scopes[index.rem_euclid(scopes.len() as isize) as usize];
-        if scope != current {
-            self.open_segments(scope);
-        }
+        self.open_segments(scopes[index.rem_euclid(scopes.len() as isize) as usize]);
     }
 
     /// `r` on an agent's own list: back to following the shared one.
-    fn reset_scope(&mut self) {
+    fn reset_list(&mut self) {
         let Screen::Segments(Some(host)) = self.screen else { return };
         if self.config.hosts.remove(&host).is_none() {
             return;
         }
         self.open_segments(Some(host));
         self.save();
+        self.notice.insert(0, Line::from(card::success(format!("✓ {} follows the shared list", host.label()))));
+    }
+
+    /// The agents found on this machine; all of them when none are.
+    fn detected_or_all(&self) -> Vec<Host> {
+        let mut choices: Vec<Host> = self.agents.iter().filter(|row| row.detected).map(|row| row.host).collect();
+        if choices.is_empty() {
+            choices = Host::ALL.to_vec();
+        }
+        choices
     }
 
     /// Opens the Segments screen at `scope` with the cursor on the segment it was on.
@@ -285,21 +283,21 @@ impl App {
     }
 
     /// Every segment in this visit's fixed order, with whether it is shown.
-    fn segment_rows(&self, host: Option<Host>) -> Vec<(Segment, bool)> {
-        let shown = self.shown_segments(host);
+    fn segment_rows(&self, scope: Option<Host>) -> Vec<(Segment, bool)> {
+        let shown = self.shown_segments(scope);
         self.segment_order.iter().map(|segment| (*segment, shown.contains(segment))).collect()
     }
 
-    fn shown_segments(&self, host: Option<Host>) -> &[Segment] {
-        match host {
+    fn shown_segments(&self, scope: Option<Host>) -> &[Segment] {
+        match scope {
             Some(host) => self.config.segments_for(host),
             None => &self.config.segments,
         }
     }
 
-    fn toggle_segment(&mut self, host: Option<Host>) {
-        let (segment, shown) = self.segment_rows(host)[self.cursor];
-        self.write_shown(host, |candidate, is_shown| if candidate == segment { !shown } else { is_shown });
+    fn toggle_segment(&mut self, scope: Option<Host>) {
+        let (segment, shown) = self.segment_rows(scope)[self.cursor];
+        self.write_shown(scope, |candidate, is_shown| if candidate == segment { !shown } else { is_shown });
     }
 
     /// Icons are shared by every agent, like the theme.
@@ -316,30 +314,30 @@ impl App {
 
     /// Moves the picked-up segment one row; a shown one moves in the status line too.
     fn carry(&mut self, offset: isize) {
-        let Screen::Segments(host) = self.screen else { return };
+        let Screen::Segments(scope) = self.screen else { return };
         let Some(target) = self.cursor.checked_add_signed(offset).filter(|target| *target < self.segment_order.len())
         else {
             return;
         };
         self.segment_order.swap(self.cursor, target);
         self.cursor = target;
-        self.write_shown(host, |_, is_shown| is_shown);
+        self.write_shown(scope, |_, is_shown| is_shown);
     }
 
     /// The status line shows the segments `keep` picks, in the screen's order.
     /// Looking at an agent's list, or moving a hidden row, creates no override;
     /// the first change that alters the shown list does.
-    fn write_shown(&mut self, host: Option<Host>, keep: impl Fn(Segment, bool) -> bool) {
+    fn write_shown(&mut self, scope: Option<Host>, keep: impl Fn(Segment, bool) -> bool) {
         let shown: Vec<Segment> = self
-            .segment_rows(host)
+            .segment_rows(scope)
             .into_iter()
             .filter(|(segment, shown)| keep(*segment, *shown))
             .map(|(segment, _)| segment)
             .collect();
-        if self.shown_segments(host) == shown.as_slice() {
+        if self.shown_segments(scope) == shown.as_slice() {
             return;
         }
-        *self.config.segments_mut(host) = shown;
+        *self.config.segments_mut(scope) = shown;
         self.save();
     }
 
@@ -409,5 +407,23 @@ impl App {
 
     fn agent(&self, host: Host) -> &AgentRow {
         &self.agents[self.agent_index(host)]
+    }
+}
+
+/// `tab`'s stops on Segments: All agents, the detected ones, then agents whose
+/// own list survives even after their install is gone.
+fn scope_choices(detected: &[Host], owned: &[Host]) -> Vec<Option<Host>> {
+    let reachable = detected.iter().copied().chain(owned.iter().copied().filter(|host| !detected.contains(host)));
+    std::iter::once(None).chain(reachable.map(Some)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scopes_stay_reachable_for_an_agent_whose_install_is_gone() {
+        let scopes = scope_choices(&[Host::Claude], &[Host::Claude, Host::Gemini]);
+        assert_eq!(scopes, vec![None, Some(Host::Claude), Some(Host::Gemini)]);
     }
 }

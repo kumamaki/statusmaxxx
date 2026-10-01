@@ -15,7 +15,7 @@ pub fn card(app: &App, width: usize) -> (Card, usize) {
     let inner = Card::inner(width);
     let (body, focus_line, hint) = match app.screen {
         Screen::Home => home(app),
-        Screen::Segments(host) => segments(app, host, inner),
+        Screen::Segments(scope) => segments(app, scope, inner),
         Screen::Agents => agents(app, inner),
         Screen::Agent(host) => agent(app, host, inner),
         Screen::Style => style(app, inner),
@@ -54,19 +54,23 @@ fn agent_control(host: Host, cycles: bool) -> Line<'static> {
     if !cycles {
         return Line::from(text(host.label()));
     }
-    let widest = Host::ALL.iter().map(|host| host.label().width()).max().unwrap_or(0);
+    let widest = widest_agent_label();
     let mut spans = vec![muted("◂  ")];
     spans.extend(card::slot(text(host.label()), widest));
     spans.push(muted("  ▸"));
     Line::from(spans)
 }
 
+fn widest_agent_label() -> usize {
+    Host::ALL.iter().map(|host| host.label().width()).max().unwrap_or(0)
+}
+
 /// `[tab]  All agents`: the Segments screen's scope. A keycap rather than ◂ ▸,
 /// which stand for ←/→ — that pair already shows and hides segments.
 fn scope_control(scope: Option<Host>) -> Line<'static> {
-    const ALL: &str = "All agents";
-    let label = scope.map_or(ALL, |host| host.label());
-    let widest = Host::ALL.iter().map(|host| host.label().width()).chain([ALL.width()]).max().unwrap_or(0);
+    const ALL_AGENTS: &str = "All agents";
+    let label = scope.map_or(ALL_AGENTS, |host| host.label());
+    let widest = widest_agent_label().max(ALL_AGENTS.width());
     let mut spans = vec![muted("[tab]  ")];
     spans.extend(card::slot(text(label), widest));
     Line::from(spans)
@@ -139,7 +143,7 @@ fn previewed_list(app: &App) -> &[Segment] {
 }
 
 /// Labels of the agents with their own segment list, in config order.
-fn own_lists(app: &App) -> Vec<&'static str> {
+fn agents_with_own_list(app: &App) -> Vec<&'static str> {
     app.config.hosts.keys().map(|host| host.label()).collect()
 }
 
@@ -181,19 +185,26 @@ fn home(app: &App) -> Screenful {
     (body, focus_line, hint.to_string())
 }
 
-fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
-    let own = host.is_some_and(|host| app.config.hosts.contains_key(&host));
-    let scope = match host {
+fn segments(app: &App, scope: Option<Host>, inner: usize) -> Screenful {
+    let own = scope.is_some_and(|host| app.config.hosts.contains_key(&host));
+    // On the shared scope the preview still renders through one agent; name it.
+    let ownership = match scope {
         Some(host) if own => format!("{} has its own list · r resets it to shared", host.label()),
         Some(host) => format!("{} uses the shared list · a change gives it its own", host.label()),
-        None => match own_lists(app).as_slice() {
-            [] => "Every agent uses this list".to_string(),
-            owners => format!("Every other agent uses this list · own list: {}", owners.join(", ")),
+        None => match agents_with_own_list(app).as_slice() {
+            [] => format!("Every agent uses this list · shown as {}", app.preview_host.label()),
+            owners => {
+                format!(
+                    "Every other agent uses this list · own list: {} · shown as {}",
+                    owners.join(", "),
+                    app.preview_host.label()
+                )
+            }
         },
     };
-    let mut body = vec![Line::from(muted(format!("{scope} · {SAVED}"))), Line::default()];
+    let mut body = vec![Line::from(muted(format!("{ownership} · {SAVED}"))), Line::default()];
     let mut focus_line = 0;
-    let rows = app.segment_rows(host);
+    let rows = app.segment_rows(scope);
     for (index, (segment, shown)) in rows.iter().enumerate() {
         if index > 0 {
             body.push(Line::default());
@@ -205,7 +216,7 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
         let mut name = vec![icon_slot(app, *segment)];
         name.push(name_span(segment.label(), focused, *shown));
         body.push(spread(name, shown_stepper(*shown, focused, focused && app.moving), inner));
-        let description = match host {
+        let description = match scope {
             Some(host) if !host.supports(*segment) => format!("{} cannot show this", host.label()),
             Some(_) => segment.description().to_string(),
             None => with_gaps(segment.description(), &agents_without(app, *segment)),
@@ -213,18 +224,19 @@ fn segments(app: &App, host: Option<Host>, inner: usize) -> Screenful {
         body.push(Line::from(vec![Span::raw(" ".repeat(ICON_SLOT)), muted(description)]));
     }
     let (segment, shown) = rows[app.cursor];
-    let scope = match (host, own) {
-        (Some(_), true) => "tab switches agent · r resets it",
+    // 80-column terminals clip the hint's tail, so the scope keys stay short.
+    let keys = match (scope, own) {
+        (Some(_), true) => "tab switches agent · r resets",
         (Some(_), false) => "tab switches agent",
         (None, _) => "tab picks an agent",
     };
-    let icons = if host.is_some() { "i toggles its icon for every agent" } else { "i toggles its icon" };
+    let icons = if scope.is_some() { "i toggles icon globally" } else { "i toggles its icon" };
     let hint = match (app.moving, shown, segment.has_icon()) {
         (true, _, _) => "↑/↓ moves it · enter puts it down".to_string(),
-        (false, true, true) => format!("←/→ hides it · {icons} · m moves it · {scope}"),
-        (false, true, false) => format!("←/→ hides it · m moves it · {scope} · esc back"),
-        (false, false, true) => format!("←/→ shows it · {icons} · m moves it · {scope}"),
-        (false, false, false) => format!("←/→ shows it · m moves it · {scope} · esc back"),
+        (false, true, true) => format!("←/→ hides · {icons} · m moves · {keys}"),
+        (false, true, false) => format!("←/→ hides · m moves · {keys}"),
+        (false, false, true) => format!("←/→ shows · {icons} · m moves · {keys}"),
+        (false, false, false) => format!("←/→ shows · m moves · {keys}"),
     };
     (body, focus_line, hint)
 }
@@ -242,7 +254,12 @@ fn agents(app: &App, inner: usize) -> Screenful {
             spread(vec![name_span(row.host.label(), focused, row.detected)], vec![own, state], inner)
         })
         .collect();
-    let hint = format!("enter opens {} · esc back", app.agents[app.cursor].host.label());
+    let host = app.agents[app.cursor].host;
+    let hint = if app.config.hosts.contains_key(&host) {
+        format!("enter opens {} · tab on Segments edits its own list", host.label())
+    } else {
+        format!("enter opens {} · esc back", host.label())
+    };
     (body, app.cursor, hint)
 }
 
@@ -370,7 +387,7 @@ fn segment_names(segments: &[Segment]) -> String {
 /// The shared list's names, plus which agents went their own way.
 fn shared_summary(app: &App) -> String {
     let names = segment_names(&app.config.segments);
-    match own_lists(app).as_slice() {
+    match agents_with_own_list(app).as_slice() {
         [] => names,
         owners => format!("{names} · own list: {}", owners.join(", ")),
     }

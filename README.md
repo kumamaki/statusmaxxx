@@ -45,8 +45,8 @@ statusmaxxx uninstall amp
 | Screen | Keys |
 |---|---|
 | Home | `←/→` switches which agent the preview shows |
-| Segments | `←/→` or `space` shows or hides a segment, `m` picks it up to move with `↑/↓` (`enter` puts it down), `i` turns its icon on or off (icons are shared by every agent). `tab` scopes the list to one agent — looking changes nothing; the first edit gives it its own list, and `r` resets it to the shared one. `↴` in the preview marks the focused segment |
-| Agents | Install and Uninstall |
+| Segments | `←/→` or `space` shows or hides a segment, `m` picks it up to move with `↑/↓` (`enter` puts it down), `i` turns its icon on or off (icons are shared by every agent). `tab`/`shift+tab` scopes the list to one agent — looking changes nothing; the first edit gives it its own list, and `r` resets it to the shared one. `↴` in the preview marks the focused segment |
+| Agents | Install and Uninstall. An agent with its own segment list is marked `Own list`; edit it on the Segments screen via `tab` |
 | Style | Theme and separator (`↑/↓` picks the row, `←/→` changes it) |
 
 `esc` goes back, `q` quits.

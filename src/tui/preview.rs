@@ -105,7 +105,7 @@ fn join(
     (Line::from(spans), marked_at)
 }
 
-/// Segments `host` is set to show from `list` but cannot.
+/// Segments in `list` that `host` cannot show.
 pub fn missing(host: Host, list: &[Segment]) -> Vec<Segment> {
     list.iter().copied().filter(|segment| !host.supports(*segment)).collect()
 }
