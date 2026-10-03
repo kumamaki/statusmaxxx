@@ -57,7 +57,7 @@ enum Command {
         #[command(subcommand)]
         event: HookEvent,
     },
-    /// Issues shown for the current worktree. Agents run these as they pick up and land work.
+    /// Issues shown for the current session. Agents run these as they pick up and land work.
     Issue {
         #[command(subcommand)]
         command: IssueCommand,
@@ -82,23 +82,57 @@ enum HookEvent {
 #[derive(Subcommand)]
 enum WorktreeCommand {
     /// Follow the repository at <path>; every repository segment shows it.
-    Set { path: PathBuf },
+    Set {
+        path: PathBuf,
+        /// The session the declaration belongs to; agents pass their own id.
+        #[arg(long)]
+        session: Option<String>,
+    },
     /// Follow this checkout's own repository again.
-    Clear,
-    /// Print the worktree the line follows.
-    Show,
+    Clear {
+        /// The session the declaration belongs to; agents pass their own id.
+        #[arg(long)]
+        session: Option<String>,
+    },
+    /// Print the worktree the line follows — every session's without --session.
+    Show {
+        /// The session the declaration belongs to; agents pass their own id.
+        #[arg(long)]
+        session: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
 enum IssueCommand {
     /// Show only this issue. Fields left out keep their stored value.
-    Set(IssueArgs),
+    Set {
+        #[command(flatten)]
+        args: IssueArgs,
+        /// The session the issue belongs to; agents pass their own id.
+        #[arg(long)]
+        session: Option<String>,
+    },
     /// Add an issue, or update it when its id is already set.
-    Add(IssueArgs),
+    Add {
+        #[command(flatten)]
+        args: IssueArgs,
+        /// The session the issue belongs to; agents pass their own id.
+        #[arg(long)]
+        session: Option<String>,
+    },
     /// Remove one issue, or all of them without an id.
-    Clear { id: Option<String> },
-    /// Print the issues set here.
-    Show,
+    Clear {
+        id: Option<String>,
+        /// The session the issue belongs to; agents pass their own id.
+        #[arg(long)]
+        session: Option<String>,
+    },
+    /// Print the issues set here — every session's without --session.
+    Show {
+        /// The session the issue belongs to; agents pass their own id.
+        #[arg(long)]
+        session: Option<String>,
+    },
 }
 
 #[derive(Args)]
@@ -197,10 +231,28 @@ fn session_start(host: Host) -> Result<()> {
     if let Some(id) = session.session_id.as_deref().filter(|id| !id.is_empty()) {
         record_payload(paths::session_hook_payload(host, id)?, &input);
     }
-    let Some(repo) = Repo::discover(&session.cwd)? else {
+    // `at`, not `discover`: session markers live in the checkout's own git dir.
+    let Some(checkout) = Repo::at(&session.cwd)? else {
         return Ok(());
     };
-    let briefing = format!("{} {}", worktree::briefing(repo.declared.as_deref()), Issues::of(&repo)?.briefing());
+    worktree::prune_stale(&checkout.git_dir)?;
+    let Some(repo) = Repo::discover(&session.cwd, session.session_id.as_deref())? else {
+        return Ok(());
+    };
+    issue::prune_stale(&repo.git_dir)?;
+    // The flag goes in only when the status line sends the same id back —
+    // otherwise the agent's declarations would land in a slot renders never read.
+    let session_flag = session
+        .session_id
+        .as_deref()
+        .filter(|_| host.reports_session_id())
+        .map(|id| format!(" --session {id}"))
+        .unwrap_or_default();
+    let briefing = format!(
+        "{} {}",
+        worktree::briefing(repo.declared.as_deref(), &session_flag),
+        Issues::of(&repo, session.session_id.as_deref())?.briefing(&session_flag)
+    );
     println!("{}", host::hook::output(host, &briefing));
     Ok(())
 }
@@ -248,7 +300,7 @@ fn worktree(command: WorktreeCommand) -> Result<()> {
         bail!("The status line follows the checkout the agent runs in, and <{}> is not in a repository", cwd.display());
     };
     match command {
-        WorktreeCommand::Set { path } => {
+        WorktreeCommand::Set { path, session } => {
             // Canonicalized so the marker holds the real path, not the spelling typed.
             let path = cwd.join(&path);
             let path = std::fs::canonicalize(&path).with_context(|| format!("Cannot resolve <{}>", path.display()))?;
@@ -258,12 +310,23 @@ fn worktree(command: WorktreeCommand) -> Result<()> {
             if Repo::at(&path)?.is_none() {
                 bail!("<{}> is not in a git repository", paths::display(&path));
             }
-            worktree::set(&repo.git_dir, &path)
+            worktree::set(&repo.git_dir, session.as_deref(), &path)
         }
-        WorktreeCommand::Clear => worktree::clear(&repo.git_dir),
-        WorktreeCommand::Show => {
-            if let Some(path) = worktree::declared(&repo.git_dir)? {
+        WorktreeCommand::Clear { session } => worktree::clear(&repo.git_dir, session.as_deref()),
+        WorktreeCommand::Show { session: Some(id) } => {
+            if let Some(path) = worktree::declared(&repo.git_dir, Some(&id))? {
                 println!("{}", paths::display(&path));
+            }
+            Ok(())
+        }
+        WorktreeCommand::Show { session: None } => {
+            let all = worktree::all(&repo.git_dir)?;
+            for (slot, path) in &all {
+                if all.len() == 1 {
+                    println!("{}", paths::display(path));
+                } else {
+                    println!("{slot}: {}", paths::display(path));
+                }
             }
             Ok(())
         }
@@ -272,31 +335,53 @@ fn worktree(command: WorktreeCommand) -> Result<()> {
 
 fn issue(command: IssueCommand) -> Result<()> {
     let cwd = std::env::current_dir().context("Cannot resolve the working directory")?;
-    let Some(repo) = Repo::discover(&cwd)? else {
-        bail!("Issues are kept per worktree, and <{}> is not in a git repository", cwd.display());
+    let session = match &command {
+        IssueCommand::Set { session, .. }
+        | IssueCommand::Add { session, .. }
+        | IssueCommand::Clear { session, .. }
+        | IssueCommand::Show { session } => session.as_deref(),
     };
-    let mut issues = Issues::of(&repo)?;
-    match command {
-        IssueCommand::Set(args) => issues.set(args.into()),
-        IssueCommand::Add(args) => issues.add(args.into()),
-        IssueCommand::Clear { id: Some(id) } => issues.remove(&id)?,
-        IssueCommand::Clear { id: None } => issues.clear(),
-        IssueCommand::Show => {
+    let Some(repo) = Repo::discover(&cwd, session)? else {
+        bail!("Issues are kept per session in a repository, and <{}> is not in a git repository", cwd.display());
+    };
+    if let IssueCommand::Show { session: None } = command {
+        let all = Issues::all(&repo)?;
+        for (slot, issues) in &all {
+            if all.len() > 1 {
+                println!("{slot}:");
+            }
             for issue in &issues.list {
-                let details = [&issue.title, &issue.state, &issue.url]
-                    .into_iter()
-                    .flatten()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>()
-                    .join(" · ");
-                if details.is_empty() {
-                    println!("{}", issue.id);
-                } else {
-                    println!("{}  {details}", issue.id);
-                }
+                println!("{}{}", if all.len() > 1 { "  " } else { "" }, issue_line(issue));
+            }
+        }
+        return Ok(());
+    }
+    let mut issues = Issues::of(&repo, session)?;
+    match command {
+        IssueCommand::Set { args, .. } => issues.set(args.into()),
+        IssueCommand::Add { args, .. } => issues.add(args.into()),
+        IssueCommand::Clear { id: Some(id), .. } => issues.remove(&id)?,
+        IssueCommand::Clear { id: None, .. } => issues.clear(),
+        IssueCommand::Show { .. } => {
+            for issue in &issues.list {
+                println!("{}", issue_line(issue));
             }
             return Ok(());
         }
     }
     issues.save()
+}
+
+/// `ENG-42  Fix auth · In Progress · <url>`
+fn issue_line(issue: &Issue) -> String {
+    let details = [&issue.title, &issue.state, &issue.url]
+        .into_iter()
+        .flatten()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(" · ");
+    match details.is_empty() {
+        true => issue.id.clone(),
+        false => format!("{}  {details}", issue.id),
+    }
 }

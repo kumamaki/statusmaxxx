@@ -169,6 +169,17 @@ impl Host {
         }
     }
 
+    /// The status line payload carries a session id we can key per-session state
+    /// (declared worktree, issues) to. Verified live for command agents; the
+    /// shims send it by construction. Agents that do not — or are unverified —
+    /// share the default slot, so their briefing leaves `--session` out.
+    pub fn reports_session_id(self) -> bool {
+        match self {
+            Host::Claude | Host::Cursor | Host::Droid | Host::Amp | Host::Pi | Host::Opencode => true,
+            Host::Qwen | Host::Copilot | Host::Codex | Host::Gemini => false,
+        }
+    }
+
     /// The session's name in the agent's own registry, when it keeps one.
     /// Claude's registry holds the messaging name other sessions reach it by.
     pub fn session_name(self, session_id: &str) -> Option<String> {

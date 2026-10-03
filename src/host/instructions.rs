@@ -54,8 +54,16 @@ fn read(path: &Path) -> Result<String> {
     }
 }
 
+/// The static block cannot know the session's id, so it tells the agent to
+/// substitute the one it reports in its status line payload.
+const AGENT_SESSION_FLAG: &str = " --session <the session id you send in your status line payload>";
+
 fn block() -> String {
-    format!("{BEGIN}\n## Status line\n\n{}\n\n{}\n{END}\n", issue::HOW_TO, worktree::HOW_TO)
+    format!(
+        "{BEGIN}\n## Status line\n\n{}\n\n{}\n{END}\n",
+        issue::how_to(AGENT_SESSION_FLAG),
+        worktree::how_to(AGENT_SESSION_FLAG)
+    )
 }
 
 /// Replaces our block, or appends it after a blank line.

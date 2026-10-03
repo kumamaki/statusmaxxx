@@ -63,7 +63,7 @@ pub fn session_hook_payload(host: Host, session_id: &str) -> Result<PathBuf> {
 }
 
 /// A session id goes into a filename, so only portable characters survive.
-fn sanitize(id: &str) -> String {
+pub(crate) fn sanitize(id: &str) -> String {
     id.chars()
         .map(
             |character| {
@@ -84,6 +84,24 @@ pub fn binary() -> Result<PathBuf> {
         .map(|directory| directory.join(APP))
         .find(|candidate| fs::canonicalize(candidate).is_ok_and(|target| target == resolved));
     Ok(on_path.unwrap_or(resolved))
+}
+
+/// Files a dead session leaves behind are inert, but they pile up; anything
+/// untouched for a month is removed. `dir` missing entirely is fine.
+pub fn prune_stale(dir: &Path) -> Result<()> {
+    let cutoff = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 24 * 3600);
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error).with_context(|| format!("Cannot read <{}>", dir.display())),
+    };
+    for entry in entries.flatten() {
+        let stale = entry.metadata().and_then(|metadata| metadata.modified()).is_ok_and(|modified| modified < cutoff);
+        if stale {
+            fs::remove_file(entry.path()).with_context(|| format!("Cannot remove <{}>", entry.path().display()))?;
+        }
+    }
+    Ok(())
 }
 
 pub fn write_file(path: &Path, contents: &str) -> Result<()> {

@@ -164,18 +164,23 @@ impl<'a> Sources<'a> {
 
     fn repo(&self) -> Result<Option<&Repo>> {
         self.repo
-            .get_or_init(|| Repo::discover(&self.session.cwd).map_err(|error| format!("{error:#}")))
+            .get_or_init(|| {
+                Repo::discover(&self.session.cwd, self.session.session_id.as_deref())
+                    .map_err(|error| format!("{error:#}"))
+            })
             .as_ref()
             .map(Option::as_ref)
             .map_err(|error| anyhow!("{error}"))
     }
 
-    /// The worktree's issues; none outside a repository.
+    /// The session's issues in the followed worktree; none outside a repository.
     fn issues(&self) -> Result<&[Issue]> {
         let repo = self.repo()?;
         self.issues
             .get_or_init(|| match repo {
-                Some(repo) => Issues::of(repo).map(|issues| issues.list).map_err(|error| format!("{error:#}")),
+                Some(repo) => Issues::of(repo, self.session.session_id.as_deref())
+                    .map(|issues| issues.list)
+                    .map_err(|error| format!("{error:#}")),
                 None => Ok(Vec::new()),
             })
             .as_deref()

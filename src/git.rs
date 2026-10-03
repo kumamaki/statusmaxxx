@@ -26,17 +26,17 @@ pub enum Head {
 }
 
 impl Repo {
-    /// The repository `cwd` belongs to — or the worktree the agent declared it
-    /// works in, which redirects the whole repository context there.
+    /// The repository `cwd` belongs to — or the worktree this session declared
+    /// it works in, which redirects the whole repository context there.
     /// `Ok(None)` outside a repository; any other git failure is an error.
-    pub fn discover(cwd: &Path) -> Result<Option<Self>> {
+    pub fn discover(cwd: &Path, session_id: Option<&str>) -> Result<Option<Self>> {
         let Some(layout) = Layout::read(cwd)? else {
             return Ok(None);
         };
         // A declaration whose target is gone is stale state, not an error:
         // `git worktree remove` does not clean our marker up.
         if let Some(declared) =
-            worktree::declared(&layout.git_dir)?.filter(|path| *path != layout.root && path.is_dir())
+            worktree::declared(&layout.git_dir, session_id)?.filter(|path| *path != layout.root && path.is_dir())
             && let Some(repo) = Self::at(&declared)?
         {
             return Ok(Some(Self { declared: Some(declared), ..repo }));
@@ -174,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn a_declared_worktree_redirects_until_cleared_or_gone() {
+    fn a_declared_worktree_redirects_only_the_session_that_set_it() {
         let temp = tempfile::tempdir().unwrap();
         let main = temp.path().join("main");
         run_git(temp.path(), &["init", "-q", "main"]);
@@ -184,22 +184,26 @@ mod tests {
         let main = std::fs::canonicalize(&main).unwrap();
         let linked = std::fs::canonicalize(&linked).unwrap();
 
-        let local = Repo::discover(&main).unwrap().unwrap();
+        let local = Repo::discover(&main, Some("first")).unwrap().unwrap();
         assert_eq!(local.worktree, None);
         assert_eq!(local.declared, None);
 
-        worktree::set(&local.git_dir, &linked).unwrap();
-        let followed = Repo::discover(&main).unwrap().unwrap();
+        worktree::set(&local.git_dir, Some("first"), &linked).unwrap();
+        let followed = Repo::discover(&main, Some("first")).unwrap().unwrap();
         assert_eq!(followed.worktree.as_deref(), Some("linked"));
         assert_eq!(followed.declared.as_deref(), Some(linked.as_path()));
 
-        worktree::clear(&local.git_dir).unwrap();
-        assert_eq!(Repo::discover(&main).unwrap().unwrap().declared, None);
+        // Other sessions — and sessions without an id — keep this checkout's own repo.
+        assert_eq!(Repo::discover(&main, Some("second")).unwrap().unwrap().declared, None);
+        assert_eq!(Repo::discover(&main, None).unwrap().unwrap().declared, None);
+
+        worktree::clear(&local.git_dir, Some("first")).unwrap();
+        assert_eq!(Repo::discover(&main, Some("first")).unwrap().unwrap().declared, None);
 
         // Removing the target leaves a stale marker; the checkout's own repo wins.
-        worktree::set(&local.git_dir, &linked).unwrap();
+        worktree::set(&local.git_dir, Some("first"), &linked).unwrap();
         std::fs::remove_dir_all(&linked).unwrap();
-        let fallen_back = Repo::discover(&main).unwrap().unwrap();
+        let fallen_back = Repo::discover(&main, Some("first")).unwrap().unwrap();
         assert_eq!(fallen_back.worktree, None);
         assert_eq!(fallen_back.declared, None);
     }

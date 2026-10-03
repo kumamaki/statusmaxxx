@@ -92,7 +92,7 @@ statusmaxxx issue clear                               # or: clear ENG-43
 statusmaxxx issue show
 ```
 
-Issues are kept per worktree, in that worktree's own git dir. They survive restarts, every linked worktree has its own list, and nothing shows up in `git status`. Any tracker works: the id is just text.
+Issues are kept per session in the followed repository's git dir, so the issue one session declares can never leak into another — a new session starts clean, while `--resume` keeps its own. Sessions without an id, and commands run by hand, share a `default` slot. Nothing shows up in `git status`, and any tracker works: the id is just text.
 
 `install` teaches the agent to do this, at the points where it matters:
 
@@ -103,7 +103,7 @@ Issues are kept per worktree, in that worktree's own git dir. They survive resta
 | Copilot CLI | `sessionStart` hook in `~/.copilot/hooks/statusmaxxx.json` |
 | Amp, pi, OpenCode | marked block in their global `AGENTS.md` |
 
-The hook runs at startup, on resume, and after compaction. It tells the agent which worktree the line follows, what this worktree shows (`ENG-42 "Fix auth" (In Progress)`), or that nothing is set, and how to update it. Try it with `echo '{"cwd":"'$PWD'"}' | statusmaxxx hook session-start --host claude`.
+The hook runs at startup, on resume, and after compaction. It tells the agent which worktree the line follows, what this session shows (`ENG-42 "Fix auth" (In Progress)`), or that nothing is set, and how to update it — the commands it prints carry the session's own id as `--session`. Try it with `echo '{"cwd":"'$PWD'"}' | statusmaxxx hook session-start --host claude`.
 
 ## Worktrees
 
@@ -115,7 +115,7 @@ statusmaxxx worktree show
 statusmaxxx worktree clear                   # the work landed; back to this checkout
 ```
 
-The declaration lives in the session checkout's own git dir, like the issue list, so each checkout follows its own worktree and nothing shows up in `git status`. A declaration whose worktree is gone is ignored — the line falls back to the checkout's repository.
+The declaration lives in the session checkout's git dir, keyed by session, so each session follows its own worktree and a session that ends leaves nothing for the next one to inherit. A declaration whose worktree is gone is ignored — the line falls back to the checkout's repository.
 
 ## Config
 
