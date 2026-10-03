@@ -96,7 +96,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn each_session_owns_a_file_and_the_shared_slot_is_legacy() {
+    fn each_session_owns_a_file_and_the_shared_slot_is_default() {
         let git_dir = Path::new("/repo/.git");
         assert_eq!(file(git_dir, None), git_dir.join("statusmaxxx/worktree"));
         assert_eq!(file(git_dir, Some("abc-1")), git_dir.join("statusmaxxx/worktrees/abc-1"));
