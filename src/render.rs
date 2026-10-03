@@ -9,7 +9,7 @@ use crate::theme::{Role, Theme};
 /// `problems` are failures the line must still show — a corrupt config, a
 /// payload we could not read. They land as `✗` text after the segments.
 pub fn render(host: Host, config: &Config, session: &Session, problems: &[String]) -> String {
-    let segments = segments(config.segments_for(host), &Sources::new(session, &config.icons));
+    let segments = segments(config.segments_for(host), &Sources::new(session, &config.icons, config.icon_font));
     let error = problems.iter().map(|problem| format!("✗ {problem}")).collect::<Vec<_>>().join(" ");
     match host.output() {
         Output::Ansi { hyperlinks } => {

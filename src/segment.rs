@@ -84,23 +84,78 @@ impl Segment {
         }
     }
 
+    /// This segment has a glyph to draw when icons are on.
     pub fn has_icon(self) -> bool {
-        !self.icon().is_empty()
+        !self.icon(IconFont::Nerd).is_empty()
     }
 
-    pub fn icon(self) -> &'static str {
-        match self {
-            Segment::Directory => "\u{f07b}",
-            Segment::Worktree => "\u{f401}",
-            Segment::Branch => "\u{e725}",
-            // `±3` and `✓` already are the glyph.
-            Segment::Changes => "",
-            Segment::Issue => "\u{f41b}",
-            Segment::Session => "\u{f120}",
-            Segment::Model => "\u{f06a9}",
-            Segment::Context => "\u{f200}",
-            Segment::Cost => "",
+    /// The segment's glyph in `font`; `""` for `IconFont::None` and for
+    /// segments whose text already is the mark (`±3`, `✓`, `$1.50`).
+    pub fn icon(self, font: IconFont) -> &'static str {
+        match font {
+            IconFont::Nerd => match self {
+                Segment::Directory => "\u{f07b}",
+                Segment::Worktree => "\u{f401}",
+                Segment::Branch => "\u{e725}",
+                Segment::Changes => "",
+                Segment::Issue => "\u{f41b}",
+                Segment::Session => "\u{f120}",
+                Segment::Model => "\u{f06a9}",
+                Segment::Context => "\u{f200}",
+                Segment::Cost => "",
+            },
+            IconFont::Unicode => match self {
+                Segment::Directory => "⌂",
+                Segment::Worktree => "⧉",
+                Segment::Branch => "⎇",
+                Segment::Changes => "",
+                Segment::Issue => "◉",
+                Segment::Session => "❯",
+                Segment::Model => "✦",
+                Segment::Context => "◔",
+                Segment::Cost => "",
+            },
+            IconFont::None => "",
         }
+    }
+}
+
+/// The glyph set icons draw from. `none` is a real pick, not an empty icons
+/// list — the per-segment toggles survive a trip through it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IconFont {
+    /// Nerd Font code points; needs a patched font.
+    #[default]
+    Nerd,
+    /// Plain Unicode glyphs that render anywhere.
+    Unicode,
+    None,
+}
+
+impl IconFont {
+    pub const ALL: [IconFont; 3] = [IconFont::Nerd, IconFont::Unicode, IconFont::None];
+
+    /// How the TUI titles the font; the config uses the kebab-case variant name.
+    pub fn label(self) -> &'static str {
+        match self {
+            IconFont::Nerd => "Nerd Fonts",
+            IconFont::Unicode => "Unicode",
+            IconFont::None => "None",
+        }
+    }
+
+    pub fn next(self) -> IconFont {
+        self.offset(1)
+    }
+
+    pub fn previous(self) -> IconFont {
+        self.offset(Self::ALL.len() - 1)
+    }
+
+    fn offset(self, steps: usize) -> IconFont {
+        let index = Self::ALL.iter().position(|font| *font == self).unwrap_or(0);
+        Self::ALL[(index + steps) % Self::ALL.len()]
     }
 }
 
@@ -127,7 +182,14 @@ impl Segment {
     }
 }
 
-const LINKED_WORKTREE_ICON: &str = "\u{f1bb}";
+/// The linked-worktree mark differs from the segment's own only in Nerd Fonts —
+/// in Unicode the `repo:folder` colon already says the folders are linked.
+fn linked_worktree_icon(font: IconFont) -> &'static str {
+    match font {
+        IconFont::Nerd => "\u{f1bb}",
+        _ => Segment::Worktree.icon(font),
+    }
+}
 
 /// A run of text in one role. A segment renders to zero pieces when it has nothing to say.
 #[derive(Debug, Clone, PartialEq)]
@@ -148,18 +210,25 @@ impl Piece {
 pub struct Sources<'a> {
     session: &'a Session,
     icons: &'a BTreeSet<Segment>,
+    font: IconFont,
     repo: OnceCell<Result<Option<Repo>, String>>,
     issues: OnceCell<Result<Vec<Issue>, String>>,
 }
 
 impl<'a> Sources<'a> {
-    pub fn new(session: &'a Session, icons: &'a BTreeSet<Segment>) -> Self {
-        Self { session, icons, repo: OnceCell::new(), issues: OnceCell::new() }
+    pub fn new(session: &'a Session, icons: &'a BTreeSet<Segment>, font: IconFont) -> Self {
+        Self { session, icons, font, repo: OnceCell::new(), issues: OnceCell::new() }
     }
 
     /// Sources that never read the disk, for a preview that looks the same wherever it runs.
-    pub fn with_repo(session: &'a Session, icons: &'a BTreeSet<Segment>, repo: Repo, issues: Vec<Issue>) -> Self {
-        Self { session, icons, repo: OnceCell::from(Ok(Some(repo))), issues: OnceCell::from(Ok(issues)) }
+    pub fn with_repo(
+        session: &'a Session,
+        icons: &'a BTreeSet<Segment>,
+        font: IconFont,
+        repo: Repo,
+        issues: Vec<Issue>,
+    ) -> Self {
+        Self { session, icons, font, repo: OnceCell::from(Ok(Some(repo))), issues: OnceCell::from(Ok(issues)) }
     }
 
     fn repo(&self) -> Result<Option<&Repo>> {
@@ -188,7 +257,7 @@ impl<'a> Sources<'a> {
     }
 
     fn label(&self, segment: Segment, text: &str) -> String {
-        self.labeled(segment, segment.icon(), text)
+        self.labeled(segment, segment.icon(self.font), text)
     }
 
     /// `icon text` when `segment` has icons on; `icon` may differ from the segment's own.
@@ -224,7 +293,7 @@ impl Segment {
             Segment::Model => session
                 .model
                 .iter()
-                .map(|model| Piece::new(Role::Model, sources.labeled(self, model_icon(model), model)))
+                .map(|model| Piece::new(Role::Model, sources.labeled(self, model_icon(sources.font, model), model)))
                 .collect(),
             Segment::Context => session
                 .context_used_percent
@@ -258,7 +327,10 @@ fn directory(cwd: &Path, repo: Option<&Repo>) -> String {
 fn worktree(repo: &Repo, sources: &Sources) -> Vec<Piece> {
     match &repo.worktree {
         Some(worktree) => vec![
-            Piece::new(Role::Worktree, sources.labeled(Segment::Worktree, LINKED_WORKTREE_ICON, &repo.name)),
+            Piece::new(
+                Role::Worktree,
+                sources.labeled(Segment::Worktree, linked_worktree_icon(sources.font), &repo.name),
+            ),
             Piece::new(Role::Muted, ":"),
             Piece::new(Role::Worktree, worktree.as_str()),
         ],
@@ -340,13 +412,18 @@ const MODEL_ICONS: &[(&str, &str)] = &[
     ("minimax", "\u{ed63}"), // chess knight — the game-tree algorithm
 ];
 
-fn model_icon(model: &str) -> &'static str {
+/// Model families each get a mark in Nerd Fonts; outside it the segment's own
+/// glyph stands in — plain Unicode has no room for a distinct mark per family.
+fn model_icon(font: IconFont, model: &str) -> &'static str {
+    if font != IconFont::Nerd {
+        return Segment::Model.icon(font);
+    }
     let name = model.to_lowercase();
     MODEL_ICONS
         .iter()
         .find(|(needle, _)| name.contains(needle))
         .map(|(_, icon)| *icon)
-        .unwrap_or_else(|| Segment::Model.icon())
+        .unwrap_or_else(|| Segment::Model.icon(font))
 }
 
 fn first_words(text: &str, count: usize) -> String {
@@ -391,7 +468,7 @@ mod tests {
             session_name: None,
         };
         let no_icons = BTreeSet::new();
-        let sources = Sources::new(&session, &no_icons);
+        let sources = Sources::new(&session, &no_icons, IconFont::Nerd);
         let text: String = worktree(&repo(Some("app-auth")), &sources).into_iter().map(|piece| piece.text).collect();
         assert_eq!(text, "app:app-auth");
         let text: String = worktree(&repo(None), &sources).into_iter().map(|piece| piece.text).collect();
@@ -419,12 +496,29 @@ mod tests {
 
     #[test]
     fn model_icons_match_families_and_compound_names_take_the_specific_one() {
-        assert_eq!(model_icon("Sonnet 5.5"), "\u{f219}");
-        assert_eq!(model_icon("gpt-5.1-codex"), "\u{f00bd}");
-        assert_eq!(model_icon("[Devin] SWE 2"), "\u{f121}");
-        assert_eq!(model_icon("qwen3-coder"), "\u{f1331}");
-        assert_eq!(model_icon("MiniMax-M2"), "\u{ed63}");
-        assert_eq!(model_icon("some-future-model"), Segment::Model.icon());
+        assert_eq!(model_icon(IconFont::Nerd, "Sonnet 5.5"), "\u{f219}");
+        assert_eq!(model_icon(IconFont::Nerd, "gpt-5.1-codex"), "\u{f00bd}");
+        assert_eq!(model_icon(IconFont::Nerd, "[Devin] SWE 2"), "\u{f121}");
+        assert_eq!(model_icon(IconFont::Nerd, "qwen3-coder"), "\u{f1331}");
+        assert_eq!(model_icon(IconFont::Nerd, "MiniMax-M2"), "\u{ed63}");
+        assert_eq!(model_icon(IconFont::Nerd, "some-future-model"), Segment::Model.icon(IconFont::Nerd));
+    }
+
+    /// Unicode icons must render without a patched font: anything in a Private
+    /// Use Area is a Nerd Font glyph and shows as tofu where Unicode was picked.
+    #[test]
+    fn unicode_icons_stay_out_of_the_private_use_area() {
+        let private_use = |character: char| {
+            ('\u{e000}'..='\u{f8ff}').contains(&character)
+                || ('\u{f0000}'..='\u{ffffd}').contains(&character)
+                || ('\u{100000}'..='\u{10fffd}').contains(&character)
+        };
+        for segment in Segment::ALL {
+            assert!(!segment.icon(IconFont::Unicode).chars().any(private_use), "{segment:?}");
+            assert_eq!(segment.icon(IconFont::None), "");
+        }
+        assert!(!model_icon(IconFont::Unicode, "Opus").chars().any(private_use));
+        assert!(!linked_worktree_icon(IconFont::Unicode).chars().any(private_use));
     }
 
     #[test]

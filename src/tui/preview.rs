@@ -65,7 +65,8 @@ pub fn line(
         return join(items, vec![card::muted(" · ")], marked);
     }
     let session = as_sent_by(host, &sample.session);
-    let sources = Sources::with_repo(&session, &config.icons, sample.repo.clone(), sample.issues.clone());
+    let sources =
+        Sources::with_repo(&session, &config.icons, config.icon_font, sample.repo.clone(), sample.issues.clone());
     let colored = !matches!(host.output(), Output::Json { ansi: false });
     // Drawn one segment at a time, so the marked one knows where it starts.
     let draw = |ansi: String| match ansi.into_text() {

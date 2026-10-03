@@ -7,7 +7,7 @@ use unicode_width::UnicodeWidthStr;
 use super::card::{self, Card, focus, muted, spread, text};
 use super::{AGENT_ITEMS, AgentItem, App, HOME, HomeItem, STYLE_ITEMS, Screen, StyleItem, preview};
 use crate::host::{Host, InstallState, Tier};
-use crate::segment::Segment;
+use crate::segment::{IconFont, Segment};
 use crate::separator;
 use crate::theme::Theme;
 
@@ -86,7 +86,7 @@ const ICON_SLOT: usize = 3;
 
 fn icon_slot(app: &App, segment: Segment) -> Span<'static> {
     if app.config.icons.contains(&segment) {
-        let icon = segment.icon();
+        let icon = segment.icon(app.config.icon_font);
         text(format!("{icon}{}", " ".repeat(ICON_SLOT.saturating_sub(icon.width()))))
     } else {
         Span::raw(" ".repeat(ICON_SLOT))
@@ -167,7 +167,11 @@ fn home(app: &App) -> Screenful {
             HomeItem::Agents => ("Agents", agent_counts(app)),
             HomeItem::Style => {
                 let separator = separator::name(&app.config.separator);
-                ("Style", format!("{} theme · {separator} separator", app.config.theme.label()))
+                let icons = match app.config.icon_font {
+                    IconFont::None => "no icons".to_string(),
+                    font => format!("{} icons", font.label()),
+                };
+                ("Style", format!("{} theme · {separator} separator · {icons}", app.config.theme.label()))
             }
             HomeItem::Quit => ("Quit", String::new()),
         };
@@ -179,7 +183,7 @@ fn home(app: &App) -> Screenful {
     let hint = match HOME[app.cursor] {
         HomeItem::Segments => "Choose what the line shows, and in what order",
         HomeItem::Agents => "Install into Claude Code, Amp, and the others you use",
-        HomeItem::Style => "Colors of the status line, and what sits between segments",
+        HomeItem::Style => "Colors and icons of the line, and what sits between segments",
         HomeItem::Quit => "Changes are saved as you make them",
     };
     (body, focus_line, hint.to_string())
@@ -297,8 +301,9 @@ fn agent(app: &App, host: Host, inner: usize) -> Screenful {
 fn style(app: &App, inner: usize) -> Screenful {
     let themes: Vec<&str> = Theme::ALL.iter().map(|theme| theme.label()).collect();
     let separators: Vec<&str> = separator::PRESETS.iter().map(|(name, _)| *name).chain([separator::CUSTOM]).collect();
-    // One slot width for both rows, so their arrows share columns.
-    let widest = themes.iter().chain(&separators).map(|name| name.width()).max().unwrap_or(0);
+    let fonts: Vec<&str> = IconFont::ALL.iter().map(|font| font.label()).collect();
+    // One slot width for all rows, so their arrows share columns.
+    let widest = themes.iter().chain(&separators).chain(&fonts).map(|name| name.width()).max().unwrap_or(0);
     let mut body = vec![Line::from(muted(SAVED)), Line::default()];
     let first_row = body.len();
     for (index, item) in STYLE_ITEMS.iter().enumerate() {
@@ -313,6 +318,11 @@ fn style(app: &App, inner: usize) -> Screenful {
                 let current = &app.config.separator;
                 let (value, position) = (separator::name(current), separator::position(current));
                 ("Separator", Choice { value, position, count: separator::PRESETS.len() })
+            }
+            StyleItem::Icons => {
+                let current = app.config.icon_font;
+                let position = IconFont::ALL.iter().position(|font| *font == current);
+                ("Icons", Choice { value: current.label(), position, count: IconFont::ALL.len() })
             }
         };
         body.push(spread(vec![name_span(name, focused, true)], picker(choice, widest, focused), inner));

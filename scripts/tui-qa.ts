@@ -340,18 +340,32 @@ async function main(): Promise<number> {
 
     await press("esc", "down", "enter", "right");
     const style = await snapshot("style");
-    must(style, "style", "Saved as you go", "Theme", "Short Giraffe", "Separator", "Dot");
-    mustNot(style, "style", "Icons");
+    must(style, "style", "Saved as you go", "Theme", "Short Giraffe", "Separator", "Dot", "Icons", "Nerd Fonts");
     must(previewLine(style, "style"), "style", "eng-42 · ±3 · ");
     cardChrome(style, "style");
 
-    // The divider shows in the preview, and both pickers keep their arrows in one column.
+    // The divider shows in the preview, and the three pickers keep their arrows in one column.
     await press("down", "right");
     const bar = await snapshot("style-separator-bar");
     must(bar, "style-separator-bar", "Bar", "◂");
     must(previewLine(bar, "style-separator-bar"), "style-separator-bar", "eng-42 │ ±3 │ ");
-    const arrowColumns = bar.split("\n").filter((row) => /Theme|Separator/u.test(row)).map((row) => row.indexOf("◂"));
-    if (arrowColumns.length !== 2 || new Set(arrowColumns).size !== 1) failed.push(`style-separator-bar: arrows at columns ${arrowColumns}`);
+    const arrowColumns = bar.split("\n").filter((row) => /Theme|Separator|Icons/u.test(row)).map((row) => row.indexOf("◂"));
+    if (arrowColumns.length !== 3 || new Set(arrowColumns).size !== 1) failed.push(`style-separator-bar: arrows at columns ${arrowColumns}`);
+
+    // Icons cycles Nerd Fonts → Unicode → None → Nerd Fonts; the preview follows each pick.
+    await press("down", "right");
+    const unicode = await snapshot("style-icons-unicode");
+    must(unicode, "style-icons-unicode", "Unicode");
+    must(previewLine(unicode, "style-icons-unicode"), "style-icons-unicode", "⎇ eng-42");
+    await press("right");
+    const noIcons = await snapshot("style-icons-none");
+    must(noIcons, "style-icons-none", "3/3", "None");
+    mustNot(previewLine(noIcons, "style-icons-none"), "style-icons-none", "⎇", "\ue725");
+    must(previewLine(noIcons, "style-icons-none"), "style-icons-none", "eng-42");
+    await press("right");
+    const nerdAgain = await snapshot("style-icons-nerd-again");
+    must(nerdAgain, "style-icons-nerd-again", "Nerd Fonts");
+    must(previewLine(nerdAgain, "style-icons-nerd-again"), "style-icons-nerd-again", "\ue725 eng-42");
 
     await tui(["resize", "80", "24"]);
     await press("esc", "up", "up", "enter");

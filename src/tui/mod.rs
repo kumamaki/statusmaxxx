@@ -57,9 +57,10 @@ const AGENT_ITEMS: [AgentItem; 2] = [AgentItem::Install, AgentItem::Uninstall];
 enum StyleItem {
     Theme,
     Separator,
+    Icons,
 }
 
-const STYLE_ITEMS: [StyleItem; 2] = [StyleItem::Theme, StyleItem::Separator];
+const STYLE_ITEMS: [StyleItem; 3] = [StyleItem::Theme, StyleItem::Separator, StyleItem::Icons];
 
 struct AgentRow {
     host: Host,
@@ -236,6 +237,10 @@ impl App {
                     }
                     StyleItem::Separator => {
                         self.config.separator = separator::step(&self.config.separator, offset).to_string();
+                    }
+                    StyleItem::Icons => {
+                        self.config.icon_font =
+                            if offset > 0 { self.config.icon_font.next() } else { self.config.icon_font.previous() };
                     }
                 }
                 self.save();
